@@ -1,0 +1,149 @@
+---
+title: "UniversalAGI JavaScript SDK: TypeScript and Node.js Guide"
+sidebarTitle: "JavaScript"
+description: "Install and use the UniversalAGI JavaScript SDK for Node.js and browser environments with full TypeScript support, streaming, and async/await."
+---
+
+The UniversalAGI JavaScript SDK is a first-class client library for Node.js and modern browser environments. It's written in TypeScript and ships complete type definitions, giving you autocomplete, inline documentation, and compile-time safety whether your project uses TypeScript or plain JavaScript. Every API operation is `async`-first and returns native Promises, so it fits naturally into any `async/await` or `.then()` workflow.
+
+## Installation
+
+Install the package using your preferred package manager:
+
+<CodeGroup>
+```bash npm
+npm install universalagi
+```
+
+```bash yarn
+yarn add universalagi
+```
+
+```bash pnpm
+pnpm add universalagi
+```
+</CodeGroup>
+
+<Note>
+  Node.js 18 or higher is recommended. The SDK uses the native `fetch` API available in Node 18+ and all modern browsers. For Node 16, install a `fetch` polyfill such as `node-fetch` and pass it via the `fetchFn` constructor option.
+</Note>
+
+## Initialization
+
+Import the default export and construct a client instance. The client is safe to instantiate once at module level and reuse across requests.
+
+```typescript
+import UniversalAGI from 'universalagi';
+
+// Auto-reads UNIVERSALAGI_API_KEY from process.env (Node.js)
+const client = new UniversalAGI();
+
+// Or pass the key explicitly
+const client = new UniversalAGI({ apiKey: 'your-api-key' });
+```
+
+<Tip>
+  In Node.js applications, set the `UNIVERSALAGI_API_KEY` environment variable and let the SDK read it automatically. This keeps your API key out of source code and works across local development, staging, and production without code changes.
+</Tip>
+
+## Completions
+
+Call `client.completions.create()` with a model name and a messages array. All requests are asynchronous — use `await` or chain `.then()`.
+
+```typescript
+const response = await client.completions.create({
+  model: 'uagi-1',
+  messages: [{ role: 'user', content: 'Tell me a joke.' }],
+  maxTokens: 200,
+  temperature: 0.7
+});
+
+console.log(response.choices[0].message.content);
+```
+
+<Info>
+  JavaScript SDK parameters use camelCase (`maxTokens`, `systemPrompt`) while the underlying REST API uses snake_case (`max_tokens`, `system_prompt`). The SDK handles the translation automatically.
+</Info>
+
+## Streaming
+
+Pass `stream: true` to receive an async iterable of delta chunks. Use `for await...of` to process each token as it arrives.
+
+```typescript
+const stream = await client.completions.create({
+  model: 'uagi-1',
+  messages: [{ role: 'user', content: 'Tell me a joke.' }],
+  stream: true
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0].delta?.content ?? '');
+}
+```
+
+In browser environments, write each chunk to the DOM instead of `process.stdout`:
+
+```typescript
+const output = document.getElementById('output')!;
+
+for await (const chunk of stream) {
+  output.textContent += chunk.choices[0].delta?.content ?? '';
+}
+```
+
+## TypeScript types
+
+The SDK ships full type definitions with no additional `@types` package needed. Import types directly for use in your own function signatures and interfaces.
+
+```typescript
+import type { Completion, CompletionMessage, Agent, AgentRun } from 'universalagi';
+
+function formatResponse(completion: Completion): string {
+  return completion.choices[0].message.content ?? '';
+}
+
+function buildMessages(userInput: string): CompletionMessage[] {
+  return [
+    { role: 'system', content: 'You are a helpful assistant.' },
+    { role: 'user', content: userInput }
+  ];
+}
+```
+
+All request parameter objects are also fully typed, so your editor will surface required vs. optional fields and valid enum values as you type.
+
+## Error handling
+
+The SDK exports typed error classes. Catch them individually to apply the right recovery logic for each failure mode.
+
+```typescript
+import UniversalAGI, { AuthenticationError, RateLimitError, UniversalAGIError } from 'universalagi';
+
+const client = new UniversalAGI();
+
+try {
+  const response = await client.completions.create({
+    model: 'uagi-1',
+    messages: [{ role: 'user', content: 'Hello!' }]
+  });
+  console.log(response.choices[0].message.content);
+} catch (err) {
+  if (err instanceof AuthenticationError) {
+    console.error('Invalid API key — check UNIVERSALAGI_API_KEY');
+  } else if (err instanceof RateLimitError) {
+    console.error(`Rate limited. Retry after ${err.retryAfter}s`);
+  } else if (err instanceof UniversalAGIError) {
+    console.error(`API error ${err.statusCode}: ${err.message}`);
+  } else {
+    throw err; // re-throw unexpected errors
+  }
+}
+```
+
+## Browser usage
+
+The SDK works in browser environments, but you must never expose your API key in client-side code. Any secret embedded in a browser bundle can be extracted by anyone who inspects your page.
+
+<Note>
+  For browser-based applications, route all UniversalAGI API calls through a server-side backend that you control — commonly called a Backend-for-Frontend (BFF). Your browser code calls your own API, your server authenticates the user, then forwards the request to UniversalAGI using the secret API key stored securely in your server environment. This pattern keeps credentials safe and lets you apply your own rate limiting and access controls.
+</Note>

@@ -1,0 +1,118 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "luma",
+  "name": "UniversalAGI",
+  "colors": {
+    "primary": "#cacdce",
+    "light": "#e0e2e3",
+    "dark": "#9fa3a5"
+  },
+  "favicon": "https://media.brand.dev/ff933b0d-f96c-4bef-95a4-218b90634693.png",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "mailto:support@universalagi.com"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get Started",
+      "href": "https://universalagi.com/signup"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/models",
+              "concepts/agents",
+              "concepts/memory",
+              "concepts/tools"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/first-request",
+              "guides/building-agents",
+              "guides/tool-use",
+              "guides/streaming"
+            ]
+          },
+          {
+            "group": "SDKs",
+            "pages": [
+              "sdks/overview",
+              "sdks/python",
+              "sdks/javascript"
+            ]
+          },
+          {
+            "group": "Help",
+            "pages": [
+              "help/faq",
+              "help/troubleshooting",
+              "help/rate-limits"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/overview",
+              "api-reference/errors"
+            ]
+          },
+          {
+            "group": "Completions",
+            "pages": [
+              "api-reference/completions/create",
+              "api-reference/completions/streaming"
+            ]
+          },
+          {
+            "group": "Agents",
+            "pages": [
+              "api-reference/agents/create",
+              "api-reference/agents/run",
+              "api-reference/agents/list"
+            ]
+          },
+          {
+            "group": "Memory",
+            "pages": [
+              "api-reference/memory/store",
+              "api-reference/memory/retrieve"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/universalagi"
+    }
+  }
+}

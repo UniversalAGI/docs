@@ -1,0 +1,136 @@
+---
+title: "Quickstart: Make Your First UniversalAGI API Request"
+sidebarTitle: "Quickstart"
+description: "Send your first AI completion request with UniversalAGI in under 5 minutes using the Python SDK, JavaScript SDK, or the REST API directly."
+---
+
+This guide walks you through everything you need to send your first request to the UniversalAGI API. By the end, you'll have a working completion call returning a live response from an AGI-grade model — using either our Python SDK, JavaScript SDK, or the REST API directly.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- A free [UniversalAGI account](https://universalagi.com/signup)
+- A valid API key (you'll generate one in the steps below)
+
+<Steps>
+  <Step title="Sign up for UniversalAGI">
+    Create your free account at [universalagi.com/signup](https://universalagi.com/signup). The free tier gives you immediate access to the API with no credit card required.
+  </Step>
+
+  <Step title="Generate an API key">
+    After signing in, open your dashboard and navigate to **Settings → API Keys**. Click **New Key**, give it a descriptive name (for example, `dev-local`), and copy the key somewhere safe. You won't be able to view the full key again after closing the dialog.
+  </Step>
+
+  <Step title="Install the SDK">
+    Install the official UniversalAGI SDK for your preferred language. You can also call the API directly with any HTTP client if you prefer not to use an SDK.
+
+    <CodeGroup>
+      ```bash Python
+      pip install universalagi
+      ```
+
+      ```bash JavaScript
+      npm install universalagi
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Make your first request">
+    Use the code below to send a chat completion request to the `uagi-1` model. The base URL for all API requests is `https://api.universalagi.com/v1`. The SDK examples read your key from the `UNIVERSALAGI_API_KEY` environment variable automatically — no need to hard-code it.
+
+    <CodeGroup>
+      ```python Python
+      import os
+      from universalagi import UniversalAGI
+
+      # Reads UNIVERSALAGI_API_KEY from the environment automatically
+      client = UniversalAGI()
+
+      response = client.completions.create(
+          model="uagi-1",
+          messages=[
+              {"role": "user", "content": "Hello! What can you help me with today?"}
+          ]
+      )
+
+      print(response.choices[0].message.content)
+      ```
+
+      ```javascript JavaScript
+      import UniversalAGI from 'universalagi';
+
+      // Reads UNIVERSALAGI_API_KEY from the environment automatically
+      const client = new UniversalAGI();
+
+      const response = await client.completions.create({
+        model: 'uagi-1',
+        messages: [
+          { role: 'user', content: 'Hello! What can you help me with today?' }
+        ]
+      });
+
+      console.log(response.choices[0].message.content);
+      ```
+
+      ```bash cURL
+      curl https://api.universalagi.com/v1/completions \
+        -H "Authorization: Bearer $UNIVERSALAGI_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "uagi-1",
+          "messages": [
+            {"role": "user", "content": "Hello! What can you help me with today?"}
+          ]
+        }'
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Review the response">
+    A successful request returns a JSON object like the one below. The model's reply is nested inside `choices[0].message.content`, and the `usage` field tells you how many tokens were consumed.
+
+    ```json
+    {
+      "id": "cmpl_abc123",
+      "object": "completion",
+      "model": "uagi-1",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "I can help you with a wide range of tasks — from writing and analysis to coding and research. What would you like to explore?"
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 14,
+        "completion_tokens": 35,
+        "total_tokens": 49
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Keep your API key secret. Never hard-code it directly into source files you commit to version control. Instead, load it from an environment variable — for example, `UNIVERSALAGI_API_KEY` — and add any local `.env` files to your `.gitignore`.
+</Note>
+
+## Next Steps
+
+Now that you've made your first request, here's where to go next:
+
+<CardGroup cols={3}>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Learn best practices for managing API keys, scopes, and environment variables.
+  </Card>
+  <Card title="Agents" icon="robot" href="/concepts/agents">
+    Go beyond completions and deploy autonomous agents that can reason and act.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/overview">
+    Explore every available endpoint, parameter, and response type in the full API reference.
+  </Card>
+</CardGroup>

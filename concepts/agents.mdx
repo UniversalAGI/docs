@@ -1,0 +1,125 @@
+---
+title: "UniversalAGI Agents: Autonomous Multi-Step Task Runners"
+sidebarTitle: "Agents"
+description: "Understand autonomous agents on UniversalAGI: how they plan, use tools, maintain state, and complete multi-step tasks on your behalf."
+---
+
+Agents are autonomous AI workers that can plan and execute multi-step tasks using tools and memory — without requiring you to orchestrate every individual step. You give an agent a goal, and it figures out the sequence of actions needed to reach it, calling tools along the way, observing results, and adjusting its plan until the task is complete. This makes agents the right abstraction when a single model call is not enough.
+
+## How agents work
+
+Agents follow a repeating sense-plan-act loop until they produce a final answer or reach their step limit. Understanding this loop helps you design system prompts and tool sets that guide the agent effectively.
+
+<Steps>
+  <Step title="Receive goal">
+    The agent receives your input — a task description, question, or instruction — along with its configured system prompt and available tools.
+  </Step>
+  <Step title="Plan">
+    The agent reasons about the goal and decides what action to take next. It may decompose a complex goal into sub-tasks before selecting a tool.
+  </Step>
+  <Step title="Select and execute a tool">
+    The agent invokes one of its tools — for example, running a web search or executing a code snippet — and waits for the result.
+  </Step>
+  <Step title="Observe">
+    The agent reads the tool's output and incorporates it into its working context.
+  </Step>
+  <Step title="Repeat or finish">
+    If the goal is not yet met, the agent loops back to the planning step. Once it has enough information to produce a final answer, it returns its output to you.
+  </Step>
+</Steps>
+
+## Agent components
+
+Each agent is assembled from a set of configurable components. Tuning these components lets you shape the agent's behavior, cost profile, and capability ceiling.
+
+<CardGroup cols={2}>
+  <Card title="System prompt" icon="message-lines">
+    A persistent instruction set that defines the agent's role, tone, and constraints. Write it as you would a job description.
+  </Card>
+  <Card title="Model" icon="microchip-ai">
+    The underlying model that powers the agent's reasoning. Use `uagi-1-pro` for agents that require deep multi-step thinking.
+  </Card>
+  <Card title="Tools" icon="screwdriver-wrench">
+    The set of built-in or custom tools the agent is allowed to call. Only provide tools the agent actually needs.
+  </Card>
+  <Card title="Memory" icon="database">
+    Persistent or semantic memory that the agent can read from and write to across sessions. See the [Memory](/concepts/memory) page for details.
+  </Card>
+  <Card title="Max steps" icon="gauge-high">
+    A hard limit on the number of tool-call cycles the agent may complete before it must return an answer. This bounds cost and prevents runaway loops.
+  </Card>
+</CardGroup>
+
+## Creating an agent
+
+Use `client.agents.create()` to define an agent. The agent definition is persisted on UniversalAGI servers and can be reused across as many runs as you like.
+
+```python
+from universalagi import UniversalAGI
+
+client = UniversalAGI()
+
+agent = client.agents.create(
+    name="research-assistant",
+    model="uagi-1-pro",
+    system_prompt="You are a research assistant. When given a topic, search for relevant information and produce a structured summary.",
+    tools=["web_search", "calculator"],
+    max_steps=20
+)
+
+print(agent.id)  # agent_xyz789
+```
+
+## Running an agent
+
+Pass the agent's ID and a user input string to `client.agents.run()`. The run is synchronous by default — it returns once the agent has finished all its steps and produced a final output.
+
+```python
+run = client.agents.run(
+    agent_id="agent_xyz789",
+    input="Research the latest developments in fusion energy and summarize the key findings."
+)
+
+print(run.output)
+```
+
+For long-running tasks, pass `async_=True` to start the run without blocking. The call returns immediately with a run object whose `status` is `"running"`. Poll `client.agents.get_run()` until `status` becomes `"completed"` or `"failed"`:
+
+```python
+run = client.agents.run(
+    agent_id="agent_xyz789",
+    input="Research the latest developments in fusion energy and summarize the key findings.",
+    async_=True
+)
+
+# Poll until the run finishes
+import time
+while run.status == "running":
+    time.sleep(2)
+    run = client.agents.get_run(run.id)
+
+print(run.output)
+```
+
+## Agent state
+
+Agents automatically track conversation state across the steps of a single run. You can also resume an agent in a subsequent API call by passing the `thread_id` from a previous run — the agent will remember everything it did before and continue from where it left off.
+
+```python
+# First run — start a new thread
+run1 = client.agents.run(
+    agent_id="agent_xyz789",
+    input="What is the current state of commercial fusion energy?",
+)
+
+# Second run — continue the same thread
+run2 = client.agents.run(
+    agent_id="agent_xyz789",
+    thread_id=run1.thread_id,
+    input="Now focus specifically on the companies closest to commercial viability."
+)
+```
+
+<Note>
+  Ready to build your first agent end-to-end? The [Building Agents](/guides/building-agents) guide walks through a complete working example, including tool setup, error handling, and streaming output.
+</Note>

@@ -1,0 +1,125 @@
+---
+title: "Authenticate with the UniversalAGI API Using API Keys"
+sidebarTitle: "Authentication"
+description: "Learn how to create and manage UniversalAGI API keys, authenticate requests using the Bearer scheme, and resolve common authentication errors."
+---
+
+UniversalAGI uses API keys to authenticate every request made to the platform. Each API key is tied to your account and carries a specific set of permissions. You must include a valid API key in every request — calls made without one, or with an invalid or expired key, will be rejected with an error.
+
+<Warning>
+  Never expose your API keys in client-side code, public repositories, or anywhere they could be read by others. Treat your API key with the same care as a password. If a key is ever compromised, revoke it immediately from the dashboard and generate a new one.
+</Warning>
+
+## Generating an API Key
+
+You can create and manage API keys from your UniversalAGI dashboard.
+
+<Steps>
+  <Step title="Open your dashboard">
+    Sign in to your account at [universalagi.com](https://universalagi.com) and navigate to **Settings** in the sidebar.
+  </Step>
+  <Step title="Go to API Keys">
+    Select **API Keys** from the Settings menu. You'll see a list of any keys you've previously created, along with their scopes and creation dates.
+  </Step>
+  <Step title="Create a new key">
+    Click **New Key**. Give the key a descriptive name that identifies its purpose (for example, `prod-backend` or `dev-local`), select the appropriate scope, and click **Create**.
+  </Step>
+  <Step title="Copy and store your key">
+    Copy the key immediately — for security reasons, the full key value is only shown once. Store it in a secure location such as a secrets manager or an environment variable.
+  </Step>
+</Steps>
+
+## Using Your API Key
+
+Pass your API key in the `Authorization` header of every HTTP request, using the `Bearer` scheme.
+
+<CodeGroup>
+  ```bash cURL
+  curl https://api.universalagi.com/v1/completions \
+    -H "Authorization: Bearer YOUR_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"model": "uagi-1", "messages": [{"role": "user", "content": "Hello"}]}'
+  ```
+
+  ```python Python
+  from universalagi import UniversalAGI
+
+  client = UniversalAGI(api_key="YOUR_API_KEY")
+
+  response = client.completions.create(
+      model="uagi-1",
+      messages=[{"role": "user", "content": "Hello"}]
+  )
+
+  print(response.choices[0].message.content)
+  ```
+
+  ```javascript JavaScript
+  import UniversalAGI from 'universalagi';
+
+  const client = new UniversalAGI({ apiKey: 'YOUR_API_KEY' });
+
+  const response = await client.completions.create({
+    model: 'uagi-1',
+    messages: [{ role: 'user', content: 'Hello' }]
+  });
+
+  console.log(response.choices[0].message.content);
+  ```
+</CodeGroup>
+
+## Using Environment Variables
+
+The recommended way to provide your API key is through an environment variable. The UniversalAGI SDKs automatically read the `UNIVERSALAGI_API_KEY` environment variable, so you don't need to pass the key explicitly in your code.
+
+Set the variable in your shell or `.env` file:
+
+```bash
+export UNIVERSALAGI_API_KEY="your-api-key"
+```
+
+Once the variable is set, you can initialize the SDK client without passing a key directly:
+
+<CodeGroup>
+  ```python Python
+  from universalagi import UniversalAGI
+
+  # The SDK reads UNIVERSALAGI_API_KEY from the environment automatically
+  client = UniversalAGI()
+  ```
+
+  ```javascript JavaScript
+  import UniversalAGI from 'universalagi';
+
+  // The SDK reads UNIVERSALAGI_API_KEY from the environment automatically
+  const client = new UniversalAGI();
+  ```
+</CodeGroup>
+
+<Note>
+  If you're using a `.env` file for local development, make sure to add it to your `.gitignore` so it's never committed to version control. Use a dedicated secrets manager (such as AWS Secrets Manager, HashiCorp Vault, or your CI/CD platform's secret store) for production environments.
+</Note>
+
+## Key Scopes
+
+When creating an API key, you can assign it one of the following scopes to follow the principle of least privilege:
+
+| Scope | Description |
+|---|---|
+| **Read-only** | Allows read operations only, such as listing models or retrieving past completions. Cannot create or modify resources. |
+| **Full access** | Grants complete access to all API endpoints, including creating agents, writing memory, and managing resources. |
+
+Use read-only keys wherever full write access isn't needed — for example, in analytics dashboards or monitoring tools. Reserve full-access keys for your core application backend.
+
+## Authentication Errors
+
+If a request fails due to an authentication or authorization issue, the API returns one of the following error codes:
+
+| HTTP Status | Error | Description |
+|---|---|---|
+| `401 Unauthorized` | `invalid_api_key` | The API key provided is missing, malformed, or has been revoked. Check that the key is correct and hasn't expired. |
+| `403 Forbidden` | `insufficient_permissions` | The API key is valid but does not have the required scope to perform this action. Use a key with the appropriate permissions. |
+| `429 Too Many Requests` | `rate_limit_exceeded` | Your account or API key has exceeded its rate limit. Wait for the retry window indicated in the `Retry-After` response header before sending another request. |
+| `500 Internal Server Error` | `server_error` | An unexpected error occurred on the UniversalAGI platform. These are transient — retry the request with exponential back-off. If the problem persists, check the [status page](https://status.universalagi.com) or contact support. |
+
+If you continue to experience authentication issues after verifying your key, you can revoke and regenerate it from **Settings → API Keys** in your dashboard, or contact [support@universalagi.com](mailto:support@universalagi.com).

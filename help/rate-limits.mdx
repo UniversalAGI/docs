@@ -1,0 +1,129 @@
+---
+title: "UniversalAGI API Rate Limits, Quotas, and 429 Handling"
+sidebarTitle: "Rate Limits"
+description: "Understand the rate limits and token quotas that apply to your UniversalAGI plan, and learn how to handle 429 errors and implement backoff strategies."
+---
+
+UniversalAGI enforces rate limits to ensure fair usage and consistent performance across all customers. Limits apply per API key and are measured across three dimensions: requests per minute, tokens per minute, and requests per day. When a limit is exceeded, the API returns a `429 Too Many Requests` response. This page explains the limits for each plan, how to read the rate limit headers on every response, and how to write resilient code that handles limits gracefully.
+
+## Rate limit tiers
+
+Each plan tier comes with the following default limits. All limits apply per API key.
+
+| Plan | Requests / min | Tokens / min | Requests / day |
+|---|---|---|---|
+| Free | 10 | 40,000 | 500 |
+| Pro | 60 | 200,000 | 10,000 |
+| Team | 200 | 1,000,000 | 100,000 |
+| Enterprise | Custom | Custom | Custom |
+
+<Note>
+  Enterprise plans have fully customisable limits tailored to your workload. Contact sales@universalagi.com to discuss your requirements.
+</Note>
+
+If you need higher limits on a Pro or Team plan before upgrading, contact support@universalagi.com with a brief description of your use case. We can review limit increases for qualified workloads on a case-by-case basis.
+
+## Rate limit headers
+
+Every API response includes headers that tell you your current limit status. Read these headers to make intelligent throttling decisions in your client code — you don't have to wait for a `429` to know you're approaching a limit.
+
+| Header | Description |
+|---|---|
+| `X-RateLimit-Limit` | The maximum number of requests allowed in the current window. |
+| `X-RateLimit-Remaining` | The number of requests remaining in the current window. |
+| `X-RateLimit-Reset` | A Unix timestamp indicating when the current window resets and your full allowance is restored. |
+
+An example response header set might look like:
+
+```
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 43
+X-RateLimit-Reset: 1720000860
+```
+
+When `X-RateLimit-Remaining` reaches `0`, your next request will return a `429`. You can use `X-RateLimit-Reset` to calculate exactly how long to wait before retrying.
+
+## Handling 429 errors
+
+When you receive a `429`, do not retry immediately. Tight retry loops will make the situation worse and may result in your key being temporarily suspended. The correct pattern is **exponential backoff with jitter**: wait an increasing amount of time between retries, and add a small random value to prevent multiple clients from retrying in lockstep.
+
+The following Python example demonstrates a robust retry wrapper:
+
+```python
+import time
+import random
+from universalagi import UniversalAGI, RateLimitError
+
+client = UniversalAGI()
+
+def create_with_retry(max_retries=5, **kwargs):
+    for attempt in range(max_retries):
+        try:
+            return client.completions.create(**kwargs)
+        except RateLimitError as e:
+            if attempt == max_retries - 1:
+                raise  # exhausted all retries, propagate the error
+            wait = (2 ** attempt) + random.uniform(0, 1)
+            print(f"Rate limited. Waiting {wait:.1f}s before retry {attempt + 1}/{max_retries}")
+            time.sleep(wait)
+
+# Usage
+response = create_with_retry(
+    max_retries=5,
+    model="uagi-1",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+```
+
+This produces wait times of approximately 1s, 2s, 4s, 8s, and 16s between successive attempts — with jitter preventing synchronised retries across concurrent workers.
+
+<Info>
+  If the `RateLimitError` object includes a `retry_after` attribute, use that value as the minimum wait time rather than your computed backoff. The API sets `retry_after` based on the actual reset time and it is always the most accurate signal.
+</Info>
+
+For the equivalent in JavaScript/TypeScript:
+
+```typescript
+import UniversalAGI, { RateLimitError } from 'universalagi';
+
+const client = new UniversalAGI();
+
+async function createWithRetry(params: object, maxRetries = 5) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await client.completions.create(params as any);
+    } catch (err) {
+      if (!(err instanceof RateLimitError) || attempt === maxRetries - 1) throw err;
+      const wait = (2 ** attempt + Math.random()) * 1000;
+      console.log(`Rate limited. Waiting ${(wait / 1000).toFixed(1)}s before retry ${attempt + 1}`);
+      await new Promise(resolve => setTimeout(resolve, wait));
+    }
+  }
+}
+```
+
+## Token counting
+
+Because rate limits include a tokens-per-minute dimension, it helps to estimate your token consumption before sending requests — especially for large batches.
+
+A rough rule of thumb for English text is **1 token ≈ 4 characters**, or about 0.75 words. For more precise estimates, use a tokeniser library compatible with the model you're targeting (e.g. `tiktoken` for Python).
+
+You can also inspect the `usage` object in every API response to track actual consumption:
+
+```json
+"usage": {
+  "prompt_tokens": 312,
+  "completion_tokens": 88,
+  "total_tokens": 400
+}
+```
+
+Use these values to maintain a running total in your application and pause sending requests when you're approaching your per-minute token limit.
+
+<Tip>
+  If you're consistently hitting token-per-minute limits rather than request-per-minute limits, consider **upgrading your plan** for a higher token budget. Visit the [pricing page](https://universalagi.com/pricing) to compare plans and upgrade from the dashboard under **Billing → Manage Plan**.
+</Tip>
+
+<Note>
+  Both the Python and JavaScript SDKs have **built-in auto-retry with exponential backoff enabled by default**. The SDK will automatically retry on `429` errors up to `max_retries` times (default: 3) before raising the error to your code. You can disable this behaviour by setting `max_retries=0` at client initialisation if you prefer to handle retries yourself.
+</Note>

@@ -1,0 +1,119 @@
+---
+title: "Streaming API Responses in Real Time — UniversalAGI"
+sidebarTitle: "Streaming"
+description: "Learn how to enable streaming on UniversalAGI completion requests to receive tokens incrementally for lower perceived latency in your application."
+---
+
+By default, UniversalAGI waits until the entire response is generated before returning it to you. Streaming changes that behavior so that tokens are delivered as they are produced, dramatically reducing time-to-first-token and making your application feel noticeably more responsive. This is especially valuable in chat interfaces, code editors, and any context where users watch the model's output appear in real time rather than waiting for a single block of text.
+
+## Enable streaming
+
+To activate streaming, add `"stream": true` to your request body. The API will switch from returning a single JSON object to emitting a sequence of [Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) over the same HTTP connection.
+
+```json
+{
+  "model": "uagi-1",
+  "messages": [
+    { "role": "user", "content": "Write a short poem about the ocean." }
+  ],
+  "stream": true
+}
+```
+
+No other changes to your request are required. All standard parameters — `max_tokens`, `tools`, `temperature`, and so on — continue to work exactly as they do in non-streaming requests.
+
+## Handling the stream
+
+The UniversalAGI SDKs abstract the SSE protocol into a simple iterable. Iterate over the stream and read `chunk.choices[0].delta.content` on each event to build up the response incrementally.
+
+<CodeGroup>
+
+```python Python
+import os
+from universalagi import UniversalAGI
+
+client = UniversalAGI(api_key=os.environ["UNIVERSALAGI_API_KEY"])
+
+stream = client.completions.create(
+    model="uagi-1",
+    messages=[
+        {"role": "user", "content": "Write a short poem about the ocean."}
+    ],
+    stream=True
+)
+
+for chunk in stream:
+    delta = chunk.choices[0].delta
+    if delta.content:
+        print(delta.content, end="", flush=True)
+print()  # newline at end
+```
+
+```javascript JavaScript
+import UniversalAGI from 'universalagi';
+
+const client = new UniversalAGI({ apiKey: process.env.UNIVERSALAGI_API_KEY });
+
+const stream = await client.completions.create({
+  model: 'uagi-1',
+  messages: [
+    { role: 'user', content: 'Write a short poem about the ocean.' }
+  ],
+  stream: true
+});
+
+for await (const chunk of stream) {
+  const delta = chunk.choices[0].delta;
+  if (delta?.content) {
+    process.stdout.write(delta.content);
+  }
+}
+```
+
+</CodeGroup>
+
+## SSE chunk format
+
+If you are working directly with the HTTP response rather than using an SDK, each event arrives as a `data:` line containing a JSON object. The stream ends with the sentinel value `data: [DONE]`.
+
+```
+data: {"id":"cmpl_abc","object":"completion.chunk","choices":[{"delta":{"content":"Waves"},"index":0,"finish_reason":null}]}
+
+data: {"id":"cmpl_abc","object":"completion.chunk","choices":[{"delta":{"content":" of silver"},"index":0,"finish_reason":null}]}
+
+data: {"id":"cmpl_abc","object":"completion.chunk","choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}
+
+data: [DONE]
+```
+
+Key fields in each chunk:
+
+| Field | Description |
+|---|---|
+| `choices[0].delta.content` | The new token(s) in this chunk. Empty string or absent on the final chunk. |
+| `choices[0].finish_reason` | `null` during generation; `"stop"` or `"length"` on the final chunk. |
+| `id` | Shared across all chunks in the same response for correlation. |
+
+Concatenate `delta.content` values in order to reconstruct the full response text.
+
+## Streaming with agents
+
+Agent runs also support streaming. When you pass `stream=True` to `client.agents.run()`, the response emits both token-level delta events and higher-level step events as the agent moves through its execution plan. Step events let you display real-time progress — for example, showing the user which tool the agent is currently calling — without waiting for the entire run to complete.
+
+```python
+run_stream = client.agents.run(
+    agent_id=agent.id,
+    input="Summarize the top AI research papers from this week.",
+    stream=True
+)
+
+for event in run_stream:
+    if event.type == "token":
+        print(event.delta, end="", flush=True)
+    elif event.type == "step":
+        print(f"\n[Agent called: {event.tool}]")
+```
+
+<Info>
+  **Handling connection drops and retries:** Streaming responses are delivered over a long-lived HTTP connection that can be interrupted by network issues. If the connection drops mid-stream, re-send your request with a fresh `stream=True` call. To avoid duplicating content you already received, track the last `id` value you processed and filter out any chunks with IDs you have already displayed. For production applications, implement exponential backoff on transient errors (HTTP 5xx or network timeouts) and surface a clear error state to your users when a stream terminates unexpectedly.
+</Info>

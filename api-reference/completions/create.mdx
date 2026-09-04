@@ -1,0 +1,191 @@
+---
+title: "POST /v1/completions — Generate a Text Completion"
+sidebarTitle: "Create Completion"
+description: "Send messages to POST /v1/completions and receive a model-generated response. Supports sampling controls, tool use, and optional streaming."
+---
+
+The completions endpoint is the core inference primitive of the UniversalAGI API. You send a list of messages that define the conversation context, and the model generates the next assistant turn. You can control the length and style of the response through sampling parameters, invoke tools for function calling, and optionally stream the response token-by-token. Each call returns a completion object containing the generated message, finish reason, and token usage statistics.
+
+## Endpoint
+
+```
+POST https://api.universalagi.com/v1/completions
+```
+
+## Request Body
+
+<ParamField body="model" type="string" required>
+  The ID of the model to use for this completion. See `GET /v1/models` for a list of available model IDs. Example: `"uagi-1"`, `"uagi-1-pro"`.
+</ParamField>
+
+<ParamField body="messages" type="array" required>
+  An ordered array of message objects representing the conversation history. Each message must have a `role` (`"system"`, `"user"`, or `"assistant"`) and a `content` string. The model uses the full message list as context when generating its response.
+
+  ```json
+  [
+    { "role": "system", "content": "You are a helpful assistant." },
+    { "role": "user",   "content": "What is the speed of light?" }
+  ]
+  ```
+</ParamField>
+
+<ParamField body="max_tokens" type="integer" default={1024}>
+  The maximum number of tokens the model may generate in its response. One token is approximately four characters of English text. The total of `prompt_tokens` and `max_tokens` must not exceed the model's context window. **Default: `1024`**.
+</ParamField>
+
+<ParamField body="temperature" type="number" default={1.0}>
+  Sampling temperature in the range `0` to `2`. Lower values (e.g. `0.2`) produce more deterministic, focused output; higher values (e.g. `1.4`) produce more varied, creative output. Set to `0` for fully deterministic (greedy) decoding. **Default: `1.0`**.
+</ParamField>
+
+<ParamField body="top_p" type="number" default={1.0}>
+  Nucleus sampling: the model considers only the smallest set of tokens whose cumulative probability exceeds `top_p`. A value of `0.9` means the model samples from the top 90% of the probability mass. We recommend altering `temperature` or `top_p`, but not both simultaneously. **Default: `1.0`**.
+</ParamField>
+
+<ParamField body="stream" type="boolean" default={false}>
+  When `true`, the response is delivered as a stream of Server-Sent Events (SSE), with each event containing a token delta. The stream ends with a final `data: [DONE]` event. See the [Streaming](/api-reference/completions/streaming) reference for full details. **Default: `false`**.
+</ParamField>
+
+<ParamField body="tools" type="array">
+  A list of tool definitions the model may call during generation. Each tool is a JSON Schema object describing the function name, description, and parameters. When the model decides to invoke a tool, the response will have `finish_reason: "tool_calls"` and include a `tool_calls` field in the message. Optional.
+</ParamField>
+
+<ParamField body="tool_choice" type="string">
+  Controls how the model selects tools. Accepted values:
+  - `"auto"` — the model decides whether to call a tool (default when `tools` is provided).
+  - `"none"` — the model will not call any tool.
+  - A specific tool name (string) — forces the model to call that tool.
+</ParamField>
+
+<ParamField body="stop" type="string | array">
+  One or more sequences where the model will stop generating further tokens. The stop sequence itself is not included in the output. You may pass a single string or an array of up to four strings. Optional.
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  A unique identifier for this completion. IDs are prefixed with `cmpl_`.
+</ResponseField>
+
+<ResponseField name="object" type="string">
+  Always `"completion"` for non-streaming responses.
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model ID that was used to generate the response, exactly as resolved by the API (useful when you pass an alias).
+</ResponseField>
+
+<ResponseField name="choices" type="array">
+  An array of completion choices. For standard (non-`n`) requests this array contains exactly one element.
+
+  <ResponseField name="choices[].index" type="integer">
+    Zero-based index of this choice.
+  </ResponseField>
+
+  <ResponseField name="choices[].message" type="object">
+    The generated message object, with `role: "assistant"` and a `content` string. When tool calling is triggered, `content` may be `null` and the object will include a `tool_calls` array instead.
+  </ResponseField>
+
+  <ResponseField name="choices[].finish_reason" type="string">
+    The reason generation stopped. Possible values:
+    - `"stop"` — the model reached a natural end or a stop sequence.
+    - `"length"` — `max_tokens` was reached.
+    - `"tool_calls"` — the model is invoking one or more tools.
+    - `"content_filter"` — output was blocked by a content policy.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="usage" type="object">
+  Token consumption for this request.
+
+  <ResponseField name="usage.prompt_tokens" type="integer">
+    Number of tokens in the input messages.
+  </ResponseField>
+
+  <ResponseField name="usage.completion_tokens" type="integer">
+    Number of tokens in the generated response.
+  </ResponseField>
+
+  <ResponseField name="usage.total_tokens" type="integer">
+    Sum of `prompt_tokens` and `completion_tokens`.
+  </ResponseField>
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+```bash cURL
+curl https://api.universalagi.com/v1/completions \
+  -H "Authorization: Bearer $UNIVERSALAGI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "uagi-1",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "What is the speed of light?"}
+    ],
+    "max_tokens": 256,
+    "temperature": 0.7
+  }'
+```
+
+```python Python
+from universalagi import UniversalAGI
+
+client = UniversalAGI()  # reads UNIVERSALAGI_API_KEY from environment
+
+response = client.completions.create(
+    model="uagi-1",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user",   "content": "What is the speed of light?"},
+    ],
+    max_tokens=256,
+    temperature=0.7,
+)
+
+print(response.choices[0].message.content)
+```
+
+```javascript JavaScript
+import UniversalAGI from 'universalagi';
+
+const client = new UniversalAGI(); // reads UNIVERSALAGI_API_KEY from environment
+
+const response = await client.completions.create({
+  model: 'uagi-1',
+  messages: [
+    { role: 'system', content: 'You are a helpful assistant.' },
+    { role: 'user',   content: 'What is the speed of light?' },
+  ],
+  max_tokens: 256,
+  temperature: 0.7,
+});
+
+console.log(response.choices[0].message.content);
+```
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "id": "cmpl_a1b2c3d4",
+  "object": "completion",
+  "model": "uagi-1",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The speed of light in a vacuum is approximately 299,792,458 meters per second (about 186,282 miles per second)."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 24,
+    "completion_tokens": 38,
+    "total_tokens": 62
+  }
+}
+```

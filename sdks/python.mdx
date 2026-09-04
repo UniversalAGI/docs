@@ -1,0 +1,177 @@
+---
+title: "UniversalAGI Python SDK: Reference and Usage Guide"
+sidebarTitle: "Python"
+description: "Install and use the UniversalAGI Python SDK to make completions, run agents, manage memory, and handle streaming with full asyncio support."
+---
+
+The UniversalAGI Python SDK gives you a clean, Pythonic interface to the entire platform API. It ships two client classes — a standard synchronous client and a fully async counterpart built on `asyncio` — so it fits naturally into scripts, web frameworks like Django or FastAPI, and Jupyter notebooks alike. This page walks you through installation, initialization, and the most common usage patterns.
+
+## Installation
+
+Install the SDK from PyPI using pip:
+
+```bash
+pip install universalagi
+```
+
+If you intend to use the async client, install the optional async extras which pulls in the required async HTTP transport:
+
+```bash
+pip install "universalagi[async]"
+```
+
+<Note>
+  Python 3.8 or higher is required. We recommend using a virtual environment (`venv` or `conda`) to manage dependencies.
+</Note>
+
+## Initialization
+
+Instantiate the client once and reuse it across your application. Both the synchronous and async clients accept the same configuration options.
+
+```python
+# Synchronous client
+from universalagi import UniversalAGI
+
+client = UniversalAGI(api_key="your-api-key")
+
+# Or let the SDK read UNIVERSALAGI_API_KEY from the environment (recommended)
+client = UniversalAGI()
+
+# Async client
+from universalagi import AsyncUniversalAGI
+
+client = AsyncUniversalAGI()  # also auto-reads from environment
+```
+
+<Tip>
+  Store your API key in the `UNIVERSALAGI_API_KEY` environment variable rather than hard-coding it. The SDK picks it up automatically, keeping credentials out of your source code.
+</Tip>
+
+## Completions
+
+Use `client.completions.create()` to send a conversation turn and receive a model response. Pass a list of messages using the standard `role` / `content` format.
+
+```python
+response = client.completions.create(
+    model="uagi-1",
+    messages=[{"role": "user", "content": "Tell me a joke."}],
+    max_tokens=200,
+    temperature=0.7
+)
+
+print(response.choices[0].message.content)
+```
+
+For async usage, `await` the call inside an async function:
+
+```python
+import asyncio
+from universalagi import AsyncUniversalAGI
+
+client = AsyncUniversalAGI()
+
+async def main():
+    response = await client.completions.create(
+        model="uagi-1",
+        messages=[{"role": "user", "content": "Tell me a joke."}],
+        max_tokens=200,
+    )
+    print(response.choices[0].message.content)
+
+asyncio.run(main())
+```
+
+## Streaming
+
+Set `stream=True` to receive the response as a series of incremental chunks. This is ideal for chat interfaces where you want to display tokens as they arrive rather than waiting for the full response.
+
+```python
+for chunk in client.completions.create(
+    model="uagi-1",
+    messages=[{"role": "user", "content": "Tell me a joke."}],
+    stream=True
+):
+    print(chunk.choices[0].delta.content or "", end="", flush=True)
+```
+
+For async streaming, use `async for`:
+
+```python
+async def stream_response():
+    async for chunk in client.completions.create(
+        model="uagi-1",
+        messages=[{"role": "user", "content": "Tell me a joke."}],
+        stream=True
+    ):
+        print(chunk.choices[0].delta.content or "", end="", flush=True)
+```
+
+## Agents
+
+Agents are persistent, tool-equipped AI workers that can take multi-step actions. Create an agent once and invoke it repeatedly with different inputs.
+
+```python
+# Create an agent with a system prompt and tools
+agent = client.agents.create(
+    name="my-agent",
+    model="uagi-1",
+    system_prompt="You are a helpful assistant.",
+    tools=["web_search"]
+)
+
+# Run the agent with a specific task
+run = client.agents.run(
+    agent_id=agent.id,
+    input="Research quantum computing advances in 2024."
+)
+
+print(run.output)
+```
+
+You can poll the run status for long-running tasks or use the built-in `wait` parameter to block until completion:
+
+```python
+run = client.agents.run(
+    agent_id=agent.id,
+    input="Summarise the latest news.",
+    wait=True  # blocks until the run finishes
+)
+```
+
+## Error handling
+
+The SDK raises typed exceptions so you can handle specific failure modes precisely. Import the error classes alongside the client.
+
+```python
+from universalagi import UniversalAGI, AuthenticationError, RateLimitError, UniversalAGIError
+
+client = UniversalAGI()
+
+try:
+    response = client.completions.create(
+        model="uagi-1",
+        messages=[{"role": "user", "content": "Hello!"}]
+    )
+except AuthenticationError:
+    print("Invalid API key — check UNIVERSALAGI_API_KEY")
+except RateLimitError as e:
+    print(f"Rate limited. Retry after {e.retry_after}s")
+except UniversalAGIError as e:
+    # Catch-all for any other SDK or API error
+    print(f"Unexpected error: {e.status_code} — {e.message}")
+```
+
+<Warning>
+  Never log or expose the full exception object in production — it may contain request details. Log only the fields you need (`status_code`, `message`) and route alerts through your observability stack.
+</Warning>
+
+## Configuration options
+
+All options can be passed to the `UniversalAGI()` or `AsyncUniversalAGI()` constructor. Any option not supplied falls back to an environment variable or a sensible default.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `api_key` | `str` | `UNIVERSALAGI_API_KEY` env var | Your API key for authentication. |
+| `base_url` | `str` | `https://api.universalagi.com/v1` | Override the API base URL, e.g. for a proxy. |
+| `timeout` | `float` | `60.0` | Request timeout in seconds. |
+| `max_retries` | `int` | `3` | Maximum number of automatic retries on transient errors. |

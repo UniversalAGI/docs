@@ -1,0 +1,116 @@
+---
+title: "POST /v1/memory/store — Save and Index a Memory Entry"
+sidebarTitle: "Store Memory"
+description: "Persist a text entry via POST /v1/memory/store with optional tags and namespace. Indexed automatically for semantic retrieval by agents and completions."
+---
+
+The memory store endpoint lets you persist arbitrary text entries that can later be retrieved by semantic similarity search. Memory entries are the building blocks of long-term context for your agents and applications — you can store user preferences, facts, past interactions, or any information you want the model to be able to recall in future requests. Each entry is embedded and indexed automatically, so retrieval via [`GET /v1/memory/retrieve`](/api-reference/memory/retrieve) uses vector similarity rather than exact keyword matching.
+
+## Endpoint
+
+```
+POST https://api.universalagi.com/v1/memory/store
+```
+
+## Request Body
+
+<ParamField body="content" type="string" required>
+  The text content of the memory entry to store. This is the value that will be semantically searched and returned during retrieval. There is no fixed length limit, but concise, focused entries tend to retrieve more accurately than long, mixed-topic passages.
+</ParamField>
+
+<ParamField body="namespace" type="string" default="default">
+  An optional logical grouping for the memory entry. Use namespaces to separate memories by user, session, project, or any other dimension meaningful to your application (e.g. `"user-prefs"`, `"project-alpha"`, `"session-42"`). Retrieval is scoped to a namespace when you pass the `namespace` query parameter. **Default: `"default"`**.
+</ParamField>
+
+<ParamField body="tags" type="array">
+  An optional list of string tags to attach to this memory entry. Tags are stored alongside the entry and returned in retrieval responses. You can use them for organisational or display purposes. Optional.
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  The unique identifier for the stored memory entry. Prefixed with `mem_`. Use this ID to delete or reference the entry directly.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  The text content exactly as stored.
+</ResponseField>
+
+<ResponseField name="namespace" type="string">
+  The namespace under which the entry was stored.
+</ResponseField>
+
+<ResponseField name="tags" type="array">
+  The list of tags attached to the entry.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the entry was stored.
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+```bash cURL
+curl https://api.universalagi.com/v1/memory/store \
+  -H "Authorization: Bearer $UNIVERSALAGI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "The user prefers responses in bullet points with clear section headers.",
+    "namespace": "user-prefs",
+    "tags": ["formatting", "preferences"]
+  }'
+```
+
+```python Python
+from universalagi import UniversalAGI
+
+client = UniversalAGI()
+
+entry = client.memory.store(
+    content="The user prefers responses in bullet points with clear section headers.",
+    namespace="user-prefs",
+    tags=["formatting", "preferences"],
+)
+
+print(entry.id)  # e.g. "mem_x9y8z7w6"
+```
+
+```javascript JavaScript
+import UniversalAGI from 'universalagi';
+
+const client = new UniversalAGI();
+
+const entry = await client.memory.store({
+  content: 'The user prefers responses in bullet points with clear section headers.',
+  namespace: 'user-prefs',
+  tags: ['formatting', 'preferences'],
+});
+
+console.log(entry.id); // e.g. "mem_x9y8z7w6"
+```
+</CodeGroup>
+
+**Request body:**
+```json
+{
+  "content": "The user prefers responses in bullet points with clear section headers.",
+  "namespace": "user-prefs",
+  "tags": ["formatting", "preferences"]
+}
+```
+
+**Response:**
+```json
+{
+  "id": "mem_x9y8z7w6",
+  "content": "The user prefers responses in bullet points with clear section headers.",
+  "namespace": "user-prefs",
+  "tags": ["formatting", "preferences"],
+  "created_at": "2024-11-15T12:00:00Z"
+}
+```
+
+<Note>
+  Newly stored entries are available for retrieval within a few seconds. If you store an entry and immediately query it, there may be a brief propagation delay before it appears in results. For latency-sensitive workflows, consider caching the entry locally and merging it with retrieval results on the client side.
+</Note>

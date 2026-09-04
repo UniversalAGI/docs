@@ -1,0 +1,181 @@
+---
+title: "Troubleshoot Common UniversalAGI API Errors and Issues"
+sidebarTitle: "Troubleshooting"
+description: "Debug the most common errors and unexpected behaviors when using the UniversalAGI API, including auth failures, timeouts, and incomplete responses."
+---
+
+Most issues with the UniversalAGI API fall into a small set of recurring patterns. This guide walks through each one with a clear diagnosis checklist and concrete steps to fix it. Work through the relevant section top to bottom — the most common root causes are listed first in each accordion.
+
+<Note>
+  Before diving into the items below, check **[status.universalagi.com](https://status.universalagi.com)** to confirm there are no active incidents or degraded services affecting the API. If a widespread outage is in progress, the fix is to wait for the incident to be resolved rather than to change your code.
+</Note>
+
+<AccordionGroup>
+
+  <Accordion title="I'm getting a 401 Unauthorized error">
+    A `401` response means the API could not authenticate your request. Work through these checks in order:
+
+    **1. Verify the API key is correct**
+    Copy the key value from the dashboard (**Settings → API Keys**) and confirm it matches what your application is using. API keys are case-sensitive.
+
+    **2. Check the key hasn't been revoked or expired**
+    In the dashboard, look for a red "Revoked" or "Expired" badge next to the key. If the key is no longer active, generate a new one.
+
+    **3. Confirm the key is being passed correctly**
+    The key must be sent as a Bearer token in the `Authorization` header:
+    ```
+    Authorization: Bearer YOUR_API_KEY
+    ```
+    If you're using one of the official SDKs and the `UNIVERSALAGI_API_KEY` environment variable is set, this is handled automatically. If you're making raw HTTP requests, double-check the header format.
+
+    **4. Watch out for whitespace**
+    Copy-paste errors can introduce leading or trailing spaces around the key. Trim any whitespace before setting the environment variable.
+
+    **5. Scope mismatch**
+    Some endpoints require keys with specific permission scopes enabled. Check the [API Reference](/api-reference/overview) for the endpoint you're calling to confirm your key's scopes include the required permissions. You can view and edit a key's scopes from **Settings → API Keys** in the dashboard.
+  </Accordion>
+
+  <Accordion title="I'm getting a 429 Too Many Requests error">
+    A `429` response means you've exceeded a rate limit. The response body includes which limit was hit, and the `X-RateLimit-Reset` header tells you when the limit resets.
+
+    **Immediate steps:**
+    - Stop sending requests until the reset time indicated in the `X-RateLimit-Reset` header.
+    - Do not retry immediately in a tight loop — this will only compound the problem.
+
+    **Implement exponential backoff**
+    When you receive a `429`, wait before retrying. Double the wait time on each successive failure and add a small random jitter to avoid a thundering herd if multiple clients hit the limit simultaneously. Both official SDKs include built-in auto-retry with backoff, but you can also implement it manually. See the [Rate Limits](/help/rate-limits) page for a ready-to-use Python example.
+
+    **Reduce your request rate**
+    Review your code for tight loops that call the API without any throttle. Batch requests where possible, cache responses when the same prompt is repeated, and use streaming for long responses to avoid re-requesting.
+
+    **Upgrade your plan**
+    If you consistently hit limits under normal load, your plan tier may not match your traffic volume. See the [Rate Limits](/help/rate-limits) page for a plan comparison, or contact support to discuss a custom limit increase.
+  </Accordion>
+
+  <Accordion title="My response is being cut off">
+    Truncated responses are almost always caused by the `max_tokens` limit being too low for the content the model is trying to generate.
+
+    **Increase `max_tokens`**
+    Set `max_tokens` to a higher value. If you're unsure how much output to expect, set it generously (e.g. `4096`) and lower it later once you understand your typical response length.
+
+    **Check the `finish_reason` field**
+    Every completion response includes a `finish_reason` on each choice:
+    - `"stop"` — the model finished naturally. This is correct.
+    - `"length"` — the response was cut off because `max_tokens` was reached. Increase the limit.
+    - `"content_filter"` — output was truncated by a content policy.
+
+    **Check the model's context window**
+    The total number of prompt tokens + completion tokens cannot exceed the model's context window. If your prompt is very long, there may be few tokens left for the response. Use a model with a larger context window (`uagi-1-pro` supports up to 200k tokens) or trim your prompt.
+
+    **Avoid stopping sequences that trigger too early**
+    If you've set custom `stop` sequences, verify they aren't appearing inside the content you want the model to produce.
+  </Accordion>
+
+  <Accordion title="The model is not following my system prompt">
+    If the model appears to ignore or only partially follow your system prompt, try these approaches:
+
+    **Be explicit and specific**
+    Vague instructions like "be helpful" are weak constraints. Use direct, unambiguous language:
+    - ❌ `"Be concise."`
+    - ✅ `"Respond in no more than three sentences. Do not include preamble or filler phrases."`
+
+    **Put critical instructions at both the start and end of the system prompt**
+    Research consistently shows that models attend more strongly to the beginning and end of a prompt. Repeat the most important constraint twice — once at the top and once as a closing instruction.
+
+    **Use explicit formatting directives**
+    If you need a specific output format, show an example in the system prompt:
+    ```
+    Always respond with a JSON object matching this schema:
+    {"answer": "...", "confidence": 0.0–1.0}
+    Do not include any text outside the JSON object.
+    ```
+
+    **Reduce temperature**
+    Higher temperature values increase creativity but reduce adherence to instructions. For tasks requiring strict formatting or constrained output, set `temperature` to `0.0`–`0.3`.
+
+    **Separate concerns**
+    If your system prompt is very long, the model may deprioritise some parts. Break complex instructions into shorter, clearly labelled sections.
+  </Accordion>
+
+  <Accordion title="Streaming stops unexpectedly">
+    If a streaming response stops mid-generation without a `[DONE]` sentinel, the connection was likely interrupted before the model finished.
+
+    **Check your client timeout settings**
+    Many HTTP clients apply a default timeout (often 30 or 60 seconds) to all requests. For streaming responses that run longer than this, increase the timeout:
+    ```python
+    # Python SDK
+    client = UniversalAGI(timeout=300)  # 5-minute timeout
+    ```
+    ```typescript
+    // JavaScript SDK
+    const client = new UniversalAGI({ timeout: 300_000 }); // ms
+    ```
+
+    **Implement reconnect logic for long-running streams**
+    For mission-critical streaming applications, track the last successfully received chunk and implement retry logic that resumes the stream if the connection drops.
+
+    **Check for network intermediaries**
+    Load balancers, reverse proxies, and CDNs can close idle connections. If you control the infrastructure, increase the idle connection timeout on any intermediary between the client and the API.
+
+    **Check memory pressure**
+    If your process is constrained on memory and the response is very large, the runtime may close the stream to free resources. Monitor memory usage during generation.
+  </Accordion>
+
+  <Accordion title="My agent isn't completing the task">
+    When an agent run ends without producing the expected result, check the following:
+
+    **Review the run's step log**
+    Every agent run returns a log of steps taken. Inspect it to see where the agent got stuck, what it decided, and what tool calls it made. This is usually the fastest way to identify the problem.
+
+    **Check `max_steps`**
+    If the task requires more steps than the `max_steps` limit allows, the run will terminate early. Increase `max_steps` for complex, multi-step tasks.
+
+    **Verify tool permissions**
+    If the agent needs to call a tool (e.g. `web_search`, a custom API), confirm the tool is listed in the agent's `tools` array and that any required credentials for external tools are correctly configured.
+
+    **Refine the system prompt**
+    Agents use the system prompt to understand their role, constraints, and how to approach tasks. A vague or contradictory system prompt can cause the agent to misinterpret the goal or loop. Make the objective, available tools, and expected output format explicit.
+
+    **Simplify the task**
+    Very broad or ambiguous task descriptions can cause agents to go in unproductive directions. Break the task into smaller, well-defined sub-tasks and invoke the agent once per sub-task.
+
+    **Check model capability**
+    Highly complex agentic workflows may require `uagi-1-pro`. If your agent runs on `uagi-1` and consistently struggles with a particular category of task, try upgrading the model.
+  </Accordion>
+
+  <Accordion title="I'm getting inconsistent results">
+    Non-determinism in model outputs is expected — it's a feature, not a bug. But if you need more consistent, predictable output, several settings help:
+
+    **Lower the temperature**
+    `temperature` controls randomness. Set it to `0.0` for maximum determinism. Note that even at `temperature=0`, very long outputs may vary slightly due to floating-point non-determinism in distributed inference.
+
+    **Set a fixed `seed`**
+    Passing the same `seed` value on every call biases the model toward the same output for the same input. This isn't a guarantee of identical results, but it significantly reduces variation:
+    ```python
+    response = client.completions.create(
+        model="uagi-1",
+        messages=[...],
+        temperature=0,
+        seed=42
+    )
+    ```
+
+    **Use a structured output format**
+    Instructing the model to respond in a fixed schema (JSON, CSV, a specific template) dramatically reduces variation in structure while still allowing variation in content.
+
+    **Pin your system prompt**
+    Even small changes to whitespace or wording in your system prompt can shift outputs. Keep your system prompt in version control and treat changes to it with the same care as code changes.
+  </Accordion>
+
+  <Accordion title="I can't find an agent I created">
+    Agents are scoped to the **API key used to create them**. If you're looking up an agent using a different key (e.g. you created it with your development key and are querying with your production key), the agent will not be visible.
+
+    **Steps to diagnose:**
+    1. Note the API key you used when calling `agents.create()`.
+    2. Confirm that the same key is set in the environment where you're running `agents.list()` or `agents.get(agent_id)`.
+    3. Check the dashboard under **Agents** — agents are displayed per API key. Use the key selector at the top of the page to switch between keys.
+
+    If you need an agent to be accessible across multiple keys, create a dedicated "shared" API key scoped to that purpose and always create agents with that key.
+  </Accordion>
+
+</AccordionGroup>

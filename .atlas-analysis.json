@@ -1,0 +1,113 @@
+{
+  "projectType": "saas",
+  "projectName": "UniversalAGI",
+  "projectDescription": "UniversalAGI is a developer platform that provides access to advanced AI and AGI capabilities through a unified API, enabling developers to build intelligent applications.",
+  "theme": "luma",
+  "primaryColor": "#cacdce",
+  "lightColor": "#e0e2e3",
+  "darkColor": "#9fa3a5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/models",
+              "concepts/agents",
+              "concepts/memory",
+              "concepts/tools"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/first-request",
+              "guides/building-agents",
+              "guides/tool-use",
+              "guides/streaming"
+            ]
+          },
+          {
+            "group": "SDKs",
+            "pages": [
+              "sdks/overview",
+              "sdks/python",
+              "sdks/javascript"
+            ]
+          },
+          {
+            "group": "Help",
+            "pages": [
+              "help/faq",
+              "help/troubleshooting",
+              "help/rate-limits"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/overview",
+              "api-reference/errors"
+            ]
+          },
+          {
+            "group": "Completions",
+            "pages": [
+              "api-reference/completions/create",
+              "api-reference/completions/streaming"
+            ]
+          },
+          {
+            "group": "Agents",
+            "pages": [
+              "api-reference/agents/create",
+              "api-reference/agents/run",
+              "api-reference/agents/list"
+            ]
+          },
+          {
+            "group": "Memory",
+            "pages": [
+              "api-reference/memory/store",
+              "api-reference/memory/retrieve"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Unified API for AGI-grade AI models",
+    "Autonomous agent creation and orchestration",
+    "Persistent memory across conversations",
+    "Tool and function calling",
+    "Streaming responses",
+    "Python and JavaScript SDKs",
+    "Developer-friendly authentication with API keys"
+  ],
+  "publicApiSurface": [
+    "POST /v1/completions",
+    "POST /v1/completions/stream",
+    "POST /v1/agents",
+    "POST /v1/agents/{id}/run",
+    "GET /v1/agents",
+    "POST /v1/memory/store",
+    "GET /v1/memory/retrieve",
+    "GET /v1/models"
+  ]
+}

@@ -1,0 +1,141 @@
+---
+title: "Frequently Asked Questions — UniversalAGI Developer API"
+sidebarTitle: "FAQ"
+description: "Answers to common questions about UniversalAGI: API keys, billing, models, usage limits, browser usage, and enterprise plan options."
+---
+
+This page collects answers to the questions we hear most often from developers getting started with UniversalAGI and from teams scaling up their integrations. If your question isn't answered here, reach out via the in-dashboard support chat or email us at support@universalagi.com.
+
+<AccordionGroup>
+
+  <Accordion title="How do I get an API key?">
+    API keys are created and managed from the UniversalAGI dashboard:
+
+    <Steps>
+      <Step title="Open Settings">
+        Log in to the [UniversalAGI dashboard](https://app.universalagi.com) and click your account avatar in the top-right corner, then select **Settings**.
+      </Step>
+      <Step title="Navigate to API Keys">
+        In the left sidebar, click **API Keys**.
+      </Step>
+      <Step title="Create a new key">
+        Click **New API Key**, give it a descriptive name (e.g. `production-backend`), and choose an expiry. Copy the key immediately — for security reasons it is only shown once.
+      </Step>
+      <Step title="Store the key securely">
+        Set the key as the `UNIVERSALAGI_API_KEY` environment variable in your application. Never commit it to source control.
+      </Step>
+    </Steps>
+
+    You can create multiple keys for different environments (development, staging, production) and revoke any key at any time without affecting the others.
+  </Accordion>
+
+  <Accordion title="Which model should I use?">
+    If you're just getting started, use **`uagi-1`**. It's our flagship general-purpose model and handles the vast majority of tasks — conversation, summarisation, classification, code generation, and more — at low latency and cost.
+
+    Upgrade to **`uagi-1-pro`** when you need:
+    - Complex multi-step reasoning or deep analysis
+    - Longer context windows (up to 200k tokens)
+    - Higher accuracy on structured output tasks
+    - Advanced tool use and agentic workflows
+
+    Not sure which to pick? Start with `uagi-1` and switch to `uagi-1-pro` if you're seeing quality gaps on your specific workload. You can switch models by changing a single parameter in your API call, so there's no lock-in.
+  </Accordion>
+
+  <Accordion title="Is there a free tier?">
+    Yes. Every new UniversalAGI account includes a free tier that lets you explore the API at no cost. The free tier provides a generous monthly request and token budget so you can build and test a proof of concept before committing to a paid plan.
+
+    When you exceed the free tier limits, requests will return a `429` error until the monthly quota resets — you won't be charged automatically. To continue without interruption, upgrade to a paid plan from the dashboard.
+
+    Visit the [pricing page](https://universalagi.com/pricing) for current free tier limits and a full comparison of all plans.
+  </Accordion>
+
+  <Accordion title="How is usage calculated?">
+    Usage is measured in **tokens** — the subword units that language models process text with. A rough rule of thumb is that 1 token ≈ 4 characters, or about 0.75 words in English.
+
+    Every API call consumes tokens from two sources:
+
+    - **Prompt tokens** — the input you send, including system prompt, conversation history, and the current user message.
+    - **Completion tokens** — the tokens the model generates in its response.
+
+    Your bill and quota consumption is based on the sum of prompt and completion tokens. You can find a detailed token breakdown in the `usage` field of every API response:
+
+    ```json
+    "usage": {
+      "prompt_tokens": 45,
+      "completion_tokens": 132,
+      "total_tokens": 177
+    }
+    ```
+
+    The dashboard provides a real-time usage graph so you can track consumption across keys and time periods.
+  </Accordion>
+
+  <Accordion title="Can I use UniversalAGI in a browser app?">
+    Yes, but you must not expose your API key in client-side code. Any secret bundled into a browser application can be extracted by anyone who opens the browser's developer tools.
+
+    The recommended approach is the **Backend-for-Frontend (BFF)** pattern:
+
+    1. Your frontend calls an endpoint on your own server (e.g. `POST /api/chat`).
+    2. Your server authenticates the request using your own auth system.
+    3. Your server forwards the request to UniversalAGI using the API key stored securely in the server environment.
+    4. Your server streams or returns the response to the browser.
+
+    This keeps your API key completely server-side and lets you apply your own rate limiting, user-level quotas, and content filtering before traffic reaches the UniversalAGI API.
+  </Accordion>
+
+  <Accordion title="How do I cancel my subscription?">
+    You can cancel your subscription at any time from the dashboard — no need to contact support.
+
+    <Steps>
+      <Step title="Open Billing">
+        Go to the [dashboard](https://app.universalagi.com), click your account avatar, and select **Billing**.
+      </Step>
+      <Step title="Manage your plan">
+        Click **Manage Plan** to open the plan details page.
+      </Step>
+      <Step title="Cancel">
+        Scroll to the bottom of the page and click **Cancel Subscription**. Confirm when prompted.
+      </Step>
+    </Steps>
+
+    Your access continues until the end of the current billing period. After that, your account reverts to the free tier. API keys remain valid so your integrations won't break, but requests will be subject to free-tier rate limits.
+  </Accordion>
+
+  <Accordion title="What data does UniversalAGI store?">
+    By default, UniversalAGI retains **API request and response logs for 30 days** for debugging, abuse prevention, and support purposes. Logs are encrypted at rest and in transit and are not used to train models.
+
+    If you use the **Memory** feature, memory objects persist until you explicitly delete them via the API or dashboard. You can list, inspect, and delete all memory associated with your API key at any time.
+
+    For stricter data handling requirements, enterprise plans offer options including reduced log retention, zero data retention mode, and a Data Processing Agreement (DPA). Contact sales@universalagi.com for details.
+  </Accordion>
+
+  <Accordion title="Do you offer enterprise plans?">
+    Yes. Enterprise plans include:
+
+    - Custom rate limits and token quotas
+    - Dedicated infrastructure and SLA guarantees
+    - Zero data retention and custom DPA
+    - SSO / SAML integration
+    - Bulk pricing and invoice billing
+    - Dedicated technical account management
+
+    To discuss an enterprise plan, email **sales@universalagi.com** or book a call via the [Contact Sales](https://universalagi.com/contact-sales) page. We typically respond within one business day.
+  </Accordion>
+
+  <Accordion title="What's the difference between completions and agents?">
+    **Completions** are single-turn or multi-turn conversational interactions. You send a list of messages and receive a model response. Each call is stateless — you manage conversation history yourself by including prior messages in every request.
+
+    **Agents** are persistent, autonomous workers that can take multi-step actions to complete a goal. They maintain state across steps, can call tools (like web search, code execution, or your own APIs), and run until the task is complete or a step limit is reached. You create an agent once, then invoke it with high-level task descriptions.
+
+    Use completions when you need a single intelligent response. Use agents when you need the model to plan, take actions, and iterate toward a result.
+  </Accordion>
+
+  <Accordion title="How do I increase my rate limits?">
+    Rate limits are tied to your plan tier. The quickest way to get higher limits is to **upgrade your plan** from the dashboard under **Billing → Manage Plan**.
+
+    If you're on the Team or Enterprise plan and need limits beyond what's listed, contact **support@universalagi.com** with details about your use case and expected traffic. We can increase limits on a per-account basis for qualified workloads.
+
+    See the [Rate Limits](/help/rate-limits) page for a full breakdown of limits by plan and guidance on handling `429` errors gracefully in your code.
+  </Accordion>
+
+</AccordionGroup>

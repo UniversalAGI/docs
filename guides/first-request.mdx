@@ -1,0 +1,153 @@
+---
+title: "Getting Started: Your First UniversalAGI API Request"
+sidebarTitle: "First Request"
+description: "Step-by-step guide to constructing and sending your first completion request to the UniversalAGI API with curl, Python, and JavaScript."
+---
+
+This guide walks you through sending your first request to the UniversalAGI API. By the end, you will have a working completion call in your language of choice and a clear understanding of the request and response structure you will use throughout your integration.
+
+## Prerequisites
+
+Before you begin, make sure you have a valid API key. If you haven't created one yet, see the [Authentication](/authentication) guide to generate and store your key securely.
+
+<Steps>
+
+  <Step title="Construct your request">
+    Every completion request shares the same core JSON body. The required fields are a `model` identifier and a `messages` array. You can also pass optional parameters like `max_tokens` to control output length.
+
+    ```json
+    {
+      "model": "uagi-1",
+      "messages": [
+        { "role": "system", "content": "You are a helpful assistant." },
+        { "role": "user", "content": "Summarize the key benefits of renewable energy." }
+      ],
+      "max_tokens": 500
+    }
+    ```
+
+    | Field | Type | Description |
+    |---|---|---|
+    | `model` | string | The UniversalAGI model to use, e.g. `uagi-1` or `uagi-1-pro`. |
+    | `messages` | array | Ordered list of role-tagged messages forming the conversation context. |
+    | `max_tokens` | integer | Upper bound on the number of tokens in the generated response. |
+
+  </Step>
+
+  <Step title="Add your API key to the Authorization header">
+    UniversalAGI authenticates requests using a Bearer token in the `Authorization` header. The safest way to supply your key is through an environment variable so it never appears in source code or logs.
+
+    ```bash
+    export UNIVERSALAGI_API_KEY="your-api-key-here"
+    ```
+
+    Every request must include the following header:
+
+    ```
+    Authorization: Bearer $UNIVERSALAGI_API_KEY
+    ```
+
+    <Warning>
+      Never hard-code your API key directly in source files or commit it to version control. Use environment variables or a secrets manager in all environments.
+    </Warning>
+  </Step>
+
+  <Step title="Send the request">
+    Choose your preferred language or tool below. All three examples send the same request and print the model's reply.
+
+    <CodeGroup>
+
+    ```bash cURL
+    curl https://api.universalagi.com/v1/completions \
+      -H "Authorization: Bearer $UNIVERSALAGI_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "uagi-1",
+        "messages": [
+          {"role": "system", "content": "You are a helpful assistant."},
+          {"role": "user", "content": "Summarize the key benefits of renewable energy."}
+        ],
+        "max_tokens": 500
+      }'
+    ```
+
+    ```python Python
+    from universalagi import UniversalAGI
+    import os
+
+    client = UniversalAGI(api_key=os.environ["UNIVERSALAGI_API_KEY"])
+
+    response = client.completions.create(
+        model="uagi-1",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Summarize the key benefits of renewable energy."}
+        ],
+        max_tokens=500
+    )
+    print(response.choices[0].message.content)
+    ```
+
+    ```javascript JavaScript
+    import UniversalAGI from 'universalagi';
+
+    const client = new UniversalAGI({ apiKey: process.env.UNIVERSALAGI_API_KEY });
+
+    const response = await client.completions.create({
+      model: 'uagi-1',
+      messages: [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Summarize the key benefits of renewable energy.' }
+      ],
+      max_tokens: 500
+    });
+    console.log(response.choices[0].message.content);
+    ```
+
+    </CodeGroup>
+  </Step>
+
+  <Step title="Parse the response">
+    A successful request returns a JSON object with a `choices` array. Each choice contains the generated message and a `finish_reason` explaining why the model stopped generating.
+
+    ```json
+    {
+      "id": "cmpl_01abc123",
+      "object": "completion",
+      "created": 1718000000,
+      "model": "uagi-1",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "Renewable energy offers several key benefits: it reduces greenhouse gas emissions, lowers long-term energy costs, decreases dependence on fossil fuels, creates jobs in the clean-energy sector, and provides more stable energy prices over time."
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 35,
+        "completion_tokens": 58,
+        "total_tokens": 93
+      }
+    }
+    ```
+
+    To extract the text content from either the Python or JavaScript SDK, read `response.choices[0].message.content`. In a raw JSON response, follow the same path through the `choices` array.
+
+    Common `finish_reason` values you should handle:
+
+    | Value | Meaning |
+    |---|---|
+    | `stop` | The model finished naturally. |
+    | `length` | The response was cut off at `max_tokens`. |
+    | `tool_calls` | The model wants to invoke a tool. See [Tool Use](/guides/tool-use). |
+
+  </Step>
+
+</Steps>
+
+<Tip>
+  **Next steps:** Now that you can send a basic completion, explore [Streaming](/guides/streaming) to receive tokens in real time, [Tool Use](/guides/tool-use) to connect the model to your own APIs, or [Building Agents](/guides/building-agents) to automate multi-step tasks autonomously.
+</Tip>

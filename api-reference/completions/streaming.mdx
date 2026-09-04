@@ -1,0 +1,147 @@
+---
+title: "POST /v1/completions — Streaming Completion Responses"
+sidebarTitle: "Streaming"
+description: "POST /v1/completions with stream=true streams tokens via Server-Sent Events. Each chunk contains a partial delta. The stream ends with data: [DONE]."
+---
+
+Setting `stream: true` in your completion request instructs the API to return the generated response incrementally via [Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) rather than waiting until the full response is ready. Each event contains a small `delta` — typically one or a few tokens — so you can display text to your users as it is generated. Streaming is strongly recommended for interactive applications where perceived latency matters.
+
+## Endpoint
+
+```
+POST https://api.universalagi.com/v1/completions
+```
+
+Include `"stream": true` in your request body alongside all other standard [completion parameters](/api-reference/completions/create).
+
+```json
+{
+  "model": "uagi-1",
+  "messages": [{ "role": "user", "content": "Explain black holes." }],
+  "stream": true
+}
+```
+
+The response will have `Content-Type: text/event-stream` and the connection will stay open until generation is complete.
+
+## SSE Chunk Format
+
+Each line in the stream is prefixed with `data: ` and contains a JSON chunk object. Lines are separated by double newlines (`\n\n`). The stream is terminated by the sentinel value `data: [DONE]` — once you receive this, you should close the connection.
+
+```
+data: {"id":"cmpl_abc","object":"completion.chunk","model":"uagi-1","choices":[{"index":0,"delta":{"role":"assistant","content":"The"},"finish_reason":null}]}
+
+data: {"id":"cmpl_abc","object":"completion.chunk","model":"uagi-1","choices":[{"index":0,"delta":{"content":" speed"},"finish_reason":null}]}
+
+data: {"id":"cmpl_abc","object":"completion.chunk","model":"uagi-1","choices":[{"index":0,"delta":{"content":" of light"},"finish_reason":null}]}
+
+data: {"id":"cmpl_abc","object":"completion.chunk","model":"uagi-1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
+```
+
+<Note>
+  The very first chunk includes `"role": "assistant"` inside the `delta` object. Subsequent content chunks omit the role and include only the `content` delta. The final chunk before `[DONE]` has an empty `delta` and a non-null `finish_reason`.
+</Note>
+
+## Chunk Response Fields
+
+<ResponseField name="id" type="string">
+  The completion ID, shared across all chunks in the same stream. Prefixed with `cmpl_`.
+</ResponseField>
+
+<ResponseField name="object" type="string">
+  Always `"completion.chunk"` for streaming responses, distinguishing chunks from full non-streaming completion objects.
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model ID used for generation.
+</ResponseField>
+
+<ResponseField name="choices" type="array">
+  An array of choice objects. For standard (non-`n`) requests this contains exactly one element.
+
+  <ResponseField name="choices[].index" type="integer">
+    Zero-based index of this choice.
+  </ResponseField>
+
+  <ResponseField name="choices[].delta" type="object">
+    The incremental content for this chunk. On the first chunk, this may include `role: "assistant"`. On content chunks it includes `content` with the new token text. On the final chunk, `delta` is an empty object `{}`.
+  </ResponseField>
+
+  <ResponseField name="choices[].delta.content" type="string | null">
+    The token text fragment for this chunk. Concatenating `delta.content` across all chunks (excluding the final empty-delta chunk) produces the full assistant response.
+  </ResponseField>
+
+  <ResponseField name="choices[].finish_reason" type="string | null">
+    `null` for all chunks except the last, which carries the same `finish_reason` values as non-streaming completions (`"stop"`, `"length"`, `"tool_calls"`, `"content_filter"`).
+  </ResponseField>
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+```python Python
+from universalagi import UniversalAGI
+
+client = UniversalAGI()  # reads UNIVERSALAGI_API_KEY from environment
+
+stream = client.completions.create(
+    model="uagi-1",
+    messages=[{"role": "user", "content": "Explain black holes."}],
+    stream=True,
+)
+
+for chunk in stream:
+    print(chunk.choices[0].delta.content or "", end="", flush=True)
+```
+
+```javascript JavaScript
+import UniversalAGI from 'universalagi';
+
+const client = new UniversalAGI(); // reads UNIVERSALAGI_API_KEY from environment
+
+const stream = await client.completions.create({
+  model: 'uagi-1',
+  messages: [{ role: 'user', content: 'Explain black holes.' }],
+  stream: true,
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0].delta?.content ?? '');
+}
+```
+
+```bash cURL (raw SSE)
+curl https://api.universalagi.com/v1/completions \
+  -H "Authorization: Bearer $UNIVERSALAGI_API_KEY" \
+  -H "Content-Type: application/json" \
+  --no-buffer \
+  -d '{
+    "model": "uagi-1",
+    "messages": [{"role": "user", "content": "Explain black holes."}],
+    "stream": true
+  }'
+```
+</CodeGroup>
+
+## Assembling the Full Response
+
+To reconstruct the complete response text from a raw SSE stream, concatenate the `choices[0].delta.content` field from every chunk where it is non-null and non-empty:
+
+```python Python — manual assembly
+full_text = ""
+
+for chunk in stream:
+    fragment = chunk.choices[0].delta.content
+    if fragment:
+        full_text += fragment
+
+print(full_text)
+```
+
+The UniversalAGI Python and JavaScript SDKs expose a `.get_final_completion()` helper that handles this assembly for you if you need the complete text after streaming has finished.
+
+## Token Usage with Streaming
+
+Token usage (`prompt_tokens`, `completion_tokens`, `total_tokens`) is **not** included in individual SSE chunks. If you need usage statistics, make a non-streaming request, or retrieve usage from the dashboard after the fact.

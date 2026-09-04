@@ -1,0 +1,106 @@
+---
+title: "Persistent Memory in UniversalAGI: How Agents Remember"
+sidebarTitle: "Memory"
+description: "Learn how UniversalAGI's memory system stores and retrieves context across sessions, enabling agents and completions to recall past interactions."
+---
+
+Memory lets UniversalAGI agents and completions maintain context across multiple sessions and API calls. Without memory, every new request starts from a blank slate — the model has no awareness of previous interactions with the same user or task. By writing facts, preferences, and past results into the memory store, you give your application a persistent layer of understanding that improves response quality and eliminates redundant work over time.
+
+## Memory types
+
+UniversalAGI offers three distinct memory mechanisms. Each serves a different purpose, and you can use them together in the same application.
+
+<CardGroup cols={3}>
+  <Card title="Session memory" icon="clock-rotate-left">
+    **Automatic, within-conversation context.** Every message in a single API session is available to the model without any extra configuration. Session memory resets when the session ends.
+  </Card>
+  <Card title="Persistent memory" icon="hard-drive">
+    **Long-term storage you manage via the API.** You explicitly write entries to the memory store and they remain available indefinitely. Ideal for user preferences, learned facts, and cross-session continuity.
+  </Card>
+  <Card title="Semantic memory" icon="magnifying-glass">
+    **Vector-based retrieval of relevant past information.** Rather than returning every stored entry, semantic memory ranks entries by relevance to a query and returns the closest matches. Best for large memory stores where only a fraction of stored knowledge is relevant at any given moment.
+  </Card>
+</CardGroup>
+
+## Storing a memory
+
+Call `client.memory.store()` to persist a piece of information. You can attach a `namespace` to group related memories and `tags` to enable filtered retrieval later.
+
+```python
+from universalagi import UniversalAGI
+
+client = UniversalAGI()
+
+# Store a user preference
+client.memory.store(
+    content="User prefers concise bullet-point summaries over long paragraphs.",
+    namespace="user-preferences",
+    tags=["formatting", "preferences"]
+)
+```
+
+You can store any string content — structured JSON, plain prose, or extracted facts all work equally well.
+
+## Retrieving memories
+
+Use `client.memory.retrieve()` to fetch memories relevant to a query. The API uses semantic similarity to rank and return the most relevant entries up to your specified `limit`.
+
+```python
+# Retrieve relevant memories
+memories = client.memory.retrieve(
+    query="How should I format the output?",
+    namespace="user-preferences",
+    limit=5
+)
+
+for m in memories:
+    print(m.content)
+```
+
+You can narrow retrieval further by filtering on tags:
+
+```python
+memories = client.memory.retrieve(
+    query="How should I format the output?",
+    namespace="user-preferences",
+    tags=["formatting"],
+    limit=5
+)
+```
+
+## Using memory with agents
+
+When an agent is configured with access to the memory store, it automatically queries memory at the start of each run and whenever it judges that recalled context would be helpful. You do not need to retrieve and inject memories manually — the agent handles this as part of its planning loop.
+
+To enable memory for an agent, include `"memory"` in its tool list at creation time:
+
+```python
+agent = client.agents.create(
+    name="personal-assistant",
+    model="uagi-1",
+    system_prompt="You are a helpful personal assistant who remembers user preferences.",
+    tools=["web_search", "memory"],
+    max_steps=15
+)
+```
+
+The agent will read from and write to the memory store automatically as it runs, building up a richer picture of user context over time.
+
+<Steps>
+  <Step title="Agent receives input">
+    The user sends a message or task to the agent.
+  </Step>
+  <Step title="Memory query">
+    Before planning its first action, the agent queries the memory store for context relevant to the current input.
+  </Step>
+  <Step title="Augmented reasoning">
+    Retrieved memories are injected into the agent's context, allowing it to tailor its response or plan based on past information.
+  </Step>
+  <Step title="Memory update">
+    If the agent learns something worth persisting — a new preference, an important fact, or a completed sub-task — it writes a new entry to the memory store before returning its final answer.
+  </Step>
+</Steps>
+
+<Info>
+  Memories are scoped to your project and API key by default. Users or sessions within the same project share a memory namespace unless you explicitly separate them using the `namespace` parameter. Use namespaces such as `user-{user_id}` to keep memories isolated per end user.
+</Info>

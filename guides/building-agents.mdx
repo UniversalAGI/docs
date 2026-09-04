@@ -1,0 +1,170 @@
+---
+title: "Create and Run Autonomous AI Agents on UniversalAGI"
+sidebarTitle: "Building Agents"
+description: "Learn how to create, configure, and run autonomous agents that complete multi-step tasks using tools and persistent memory on UniversalAGI."
+---
+
+Autonomous agents take a high-level goal and work toward it independently — planning steps, calling tools, evaluating results, and iterating until the task is done. This guide walks you through creating your first agent on UniversalAGI, running it against a real task, inspecting each step it took, and managing the agent's lifecycle in production.
+
+## What makes a good agent?
+
+Before writing any code, it helps to think through three pillars that determine how well your agent will perform:
+
+- **System prompt** — Defines the agent's role, constraints, output format, and tone. The more precise your prompt, the more predictable the agent's behavior. Think of it as a job description.
+- **Tools** — The external capabilities the agent can invoke (web search, code execution, database queries, custom APIs). Giving an agent only the tools it actually needs reduces cost and limits unintended side-effects.
+- **Memory** — Persistent context the agent can read and write across turns. Relevant for long-running or multi-session tasks where earlier findings should influence later decisions.
+
+<Steps>
+
+  <Step title="Create the agent">
+    Call `client.agents.create()` to register a persistent agent configuration. You supply a name, model, system prompt, and the list of tools the agent is allowed to use.
+
+    ```python
+    import os
+    from universalagi import UniversalAGI
+
+    client = UniversalAGI(api_key=os.environ["UNIVERSALAGI_API_KEY"])
+
+    agent = client.agents.create(
+        name="research-assistant",
+        model="uagi-1-pro",
+        system_prompt=(
+            "You are an expert research assistant. Given a topic, search for "
+            "current information and produce a concise, structured summary with "
+            "key findings and sources."
+        ),
+        tools=["web_search"],
+        max_steps=15
+    )
+
+    print(f"Created agent: {agent.id}")
+    ```
+
+    `agent.id` is the stable identifier you reuse for all future runs — store it in your database or configuration.
+  </Step>
+
+  <Step title="Run the agent">
+    Start a new run by passing the agent's ID and the user's input. The agent immediately begins planning and executing steps asynchronously.
+
+    ```python
+    run = client.agents.run(
+        agent_id=agent.id,
+        input="What are the latest breakthroughs in quantum computing in 2024?"
+    )
+
+    print(f"Run ID: {run.id}")
+    print(f"Status: {run.status}")  # "queued" | "running" | "completed" | "failed"
+    ```
+  </Step>
+
+  <Step title="Poll or await results">
+    Runs execute asynchronously. You can either poll the run until it reaches a terminal state, or use the SDK's built-in `wait()` helper to block until completion.
+
+    ```python
+    import time
+
+    # Option A: poll manually
+    while run.status not in ("completed", "failed"):
+        time.sleep(2)
+        run = client.agents.get_run(run_id=run.id)
+        print(f"Status: {run.status}")
+
+    # Option B: SDK helper (recommended)
+    run = client.agents.wait(run_id=run.id)
+
+    if run.status == "completed":
+        print(f"Output:\n{run.output}")
+    else:
+        print(f"Run failed: {run.error}")
+    ```
+
+    The `run.output` field contains the agent's final natural-language answer once it reaches the `completed` state.
+  </Step>
+
+  <Step title="Inspect agent steps">
+    Every action the agent took is recorded in `run.steps`. Inspecting these steps is essential for debugging unexpected outputs and for building audit logs in production.
+
+    ```python
+    for step in run.steps:
+        print(f"Step {step.index}: [{step.tool}] {step.summary}")
+    ```
+
+    Each step object exposes:
+
+    | Field | Description |
+    |---|---|
+    | `step.index` | Zero-based position in the execution sequence. |
+    | `step.tool` | Name of the tool called, or `"reasoning"` for internal thought steps. |
+    | `step.input` | The arguments the agent passed to the tool. |
+    | `step.output` | The raw result returned by the tool. |
+    | `step.summary` | A human-readable description of what happened. |
+
+  </Step>
+
+  <Step title="Manage the agent lifecycle">
+    Agents are persistent resources. You can update their configuration, temporarily deactivate them, or delete them when they are no longer needed.
+
+    ```python
+    # Update the system prompt or tools
+    client.agents.update(
+        agent_id=agent.id,
+        system_prompt="Updated prompt...",
+        tools=["web_search", "code_interpreter"]
+    )
+
+    # Deactivate without deleting (runs will be rejected)
+    client.agents.deactivate(agent_id=agent.id)
+
+    # Permanently delete the agent and all associated run history
+    client.agents.delete(agent_id=agent.id)
+    ```
+  </Step>
+
+</Steps>
+
+## Example: Research assistant
+
+The following end-to-end example brings together all five steps above into a single script you can run directly. It creates a research agent, sends it a question about quantum computing, waits for the result, and then prints both the final answer and a step-by-step breakdown of how the agent reached it.
+
+```python
+import os
+from universalagi import UniversalAGI
+
+client = UniversalAGI(api_key=os.environ["UNIVERSALAGI_API_KEY"])
+
+# Step 1: Create the agent
+agent = client.agents.create(
+    name="research-assistant",
+    model="uagi-1-pro",
+    system_prompt=(
+        "You are an expert research assistant. Given a topic, search for "
+        "current information and produce a concise, structured summary with "
+        "key findings and sources."
+    ),
+    tools=["web_search"],
+    max_steps=15
+)
+
+# Step 2: Run the agent
+run = client.agents.run(
+    agent_id=agent.id,
+    input="What are the latest breakthroughs in quantum computing in 2024?"
+)
+
+# Step 3: Wait for completion
+run = client.agents.wait(run_id=run.id)
+print(f"Status: {run.status}")
+print(f"Output: {run.output}")
+
+# Step 4: Inspect the steps taken
+for step in run.steps:
+    print(f"Step {step.index}: {step.tool} — {step.summary}")
+```
+
+<Note>
+  **Cost control with `max_steps`:** Each tool call in a run consumes tokens and may incur additional costs depending on the tool (e.g. web search calls). Setting a conservative `max_steps` value during development prevents runaway agents from generating unexpected charges. Start with `max_steps=5` while testing, then raise it incrementally as you validate the agent's behavior.
+</Note>
+
+<Tip>
+  **Always test with a low `max_steps` first.** Set `max_steps=3` or `max_steps=5` when initially building a new agent. This gives you a fast, cheap feedback loop to validate that the agent is selecting the right tools and following its system prompt before you let it run to full depth.
+</Tip>

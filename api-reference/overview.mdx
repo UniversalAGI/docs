@@ -1,0 +1,106 @@
+---
+title: "UniversalAGI REST API Reference — Getting Started"
+sidebarTitle: "Overview"
+description: "The UniversalAGI REST API gives you programmatic access to completions, agents, and memory. All requests use JSON and require Bearer auth."
+---
+
+The UniversalAGI REST API gives you direct programmatic access to state-of-the-art AI and AGI capabilities — including text completions, autonomous agents, and persistent memory — through a single, unified interface. All requests are made over HTTPS, all request and response bodies are JSON, and all endpoints are authenticated via a Bearer token tied to your API key.
+
+<Note>
+  Looking for a faster integration path? UniversalAGI provides official SDK wrappers for **Python** and **JavaScript/TypeScript** that handle authentication, retries, and streaming out of the box. See the SDK documentation for installation and usage guides.
+</Note>
+
+## Base URL
+
+Every API request targets the following base URL:
+
+<CodeGroup>
+```bash Base URL
+https://api.universalagi.com/v1
+```
+</CodeGroup>
+
+All endpoints documented here are relative to this base URL. The version segment (`/v1`) is part of the path — see [Versioning](#versioning) for details.
+
+## Authentication
+
+Every request to the UniversalAGI API must include your API key as a Bearer token in the `Authorization` header. You can find and manage your API keys in the [UniversalAGI dashboard](https://dashboard.universalagi.com/keys).
+
+```bash
+Authorization: Bearer YOUR_API_KEY
+```
+
+Requests made without a valid API key will receive a `401 authentication_failed` response. Keep your API key secret — do not commit it to source control or expose it in client-side code. Use environment variables or a secrets manager to inject it at runtime.
+
+```bash Example authenticated request
+curl https://api.universalagi.com/v1/models \
+  -H "Authorization: Bearer $UNIVERSALAGI_API_KEY"
+```
+
+## Request Format
+
+All `POST` and `PATCH` requests must send a JSON body and include the `Content-Type: application/json` header. Requests missing this header or sending a malformed body will receive a `400 bad_request` response.
+
+```bash
+Content-Type: application/json
+```
+
+```bash Example POST request
+curl https://api.universalagi.com/v1/completions \
+  -H "Authorization: Bearer $UNIVERSALAGI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "uagi-1", "messages": [{"role": "user", "content": "Hello!"}]}'
+```
+
+`GET` requests pass parameters as URL query strings and do not require a `Content-Type` header.
+
+## Response Format
+
+All API responses — including errors — are returned as JSON. Successful responses wrap their payload in a predictable envelope structure. The top-level fields vary by endpoint, but every successful response includes at minimum the primary resource object or a `data` array for list endpoints.
+
+```json Successful response envelope
+{
+  "id": "cmpl_a1b2c3d4",
+  "object": "completion",
+  "model": "uagi-1",
+  "choices": [ ... ],
+  "usage": {
+    "prompt_tokens": 24,
+    "completion_tokens": 38,
+    "total_tokens": 62
+  }
+}
+```
+
+For list endpoints, responses include a `data` array along with pagination metadata:
+
+```json List response envelope
+{
+  "data": [ ... ],
+  "has_more": true,
+  "next_cursor": "cursor_abc123"
+}
+```
+
+When a request fails, the response includes an `error` object. See the [Errors](/api-reference/errors) reference for full details on error codes and handling strategies.
+
+## Available Endpoints
+
+The table below summarises every endpoint available in the current API version. Click through to the individual reference pages for full parameter and response documentation.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/v1/completions` | `POST` | Create a text completion |
+| `/v1/completions` (stream) | `POST` | Create a streaming completion via SSE |
+| `/v1/agents` | `POST` | Create an autonomous agent |
+| `/v1/agents` | `GET` | List all agents for your API key |
+| `/v1/agents/{id}/run` | `POST` | Run an agent on a task |
+| `/v1/memory/store` | `POST` | Store a memory entry |
+| `/v1/memory/retrieve` | `GET` | Retrieve memories by semantic query |
+| `/v1/models` | `GET` | List available models |
+
+## Versioning
+
+The UniversalAGI API is versioned through the URL path. The current stable version is **`v1`**, and all endpoints documented here live under `/v1`. When breaking changes are introduced — such as removed fields, changed parameter semantics, or altered response shapes — the version number is incremented (e.g. `/v2`) and the previous version continues to be supported for a deprecation window announced in advance.
+
+Additive, non-breaking changes (new optional parameters, new response fields, new endpoints) may be made to the current version at any time. Pin to a specific SDK version in production to avoid unexpected behaviour from such additions.

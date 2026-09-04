@@ -1,0 +1,146 @@
+---
+title: "POST /v1/agents — Create a Reusable Autonomous Agent"
+sidebarTitle: "Create Agent"
+description: "POST /v1/agents — create a reusable autonomous agent with a system prompt, model, tools, and step limit. Returns the agent object with a unique ID."
+---
+
+Agents are persistent, reusable entities that can autonomously plan and execute multi-step tasks using a configured set of tools. Unlike a single completion call, an agent can reason across multiple iterations, call tools, observe results, and continue until it reaches an answer or exceeds its step limit. You create an agent once — defining its model, instructions, and capabilities — and then [run it](/api-reference/agents/run) on any number of tasks. The agent's configuration is stored server-side and identified by a unique ID.
+
+## Endpoint
+
+```
+POST https://api.universalagi.com/v1/agents
+```
+
+## Request Body
+
+<ParamField body="name" type="string" required>
+  A human-readable name for the agent. Used for identification in the dashboard and in list responses. Must be between 1 and 64 characters.
+</ParamField>
+
+<ParamField body="model" type="string" required>
+  The ID of the model that will power this agent. All models support agentic operation, but more capable models (e.g. `"uagi-1-pro"`) are recommended for complex multi-step tasks. See `GET /v1/models` for available IDs.
+</ParamField>
+
+<ParamField body="system_prompt" type="string" required>
+  The core instructions that define the agent's persona, capabilities, and behaviour. This prompt is prepended to every run and is the primary mechanism for shaping what the agent does. Be specific: describe the agent's role, output format, and any constraints you want it to observe.
+</ParamField>
+
+<ParamField body="tools" type="array">
+  A list of built-in tool names to enable for this agent. Built-in tools are hosted and executed by UniversalAGI. Currently available tools include:
+  - `"web_search"` — search the web for current information.
+  - `"calculator"` — evaluate mathematical expressions.
+  - `"code_runner"` — execute Python code in a sandboxed environment.
+  - `"file_reader"` — read files uploaded to the run context.
+
+  Optional. Omit or pass an empty array to create an agent with no tools.
+</ParamField>
+
+<ParamField body="custom_tools" type="array">
+  A list of custom function definitions the agent can call during a run. Each definition follows the JSON Schema function-calling format (identical to the `tools` parameter in `/v1/completions`). When the agent emits a `tool_calls` response for a custom tool, you are responsible for executing the function and supplying the result back via the run API. Optional.
+</ParamField>
+
+<ParamField body="max_steps" type="integer" default={20}>
+  The maximum number of reasoning and tool-calling iterations the agent may perform in a single run before it is forced to return a final answer. Increase this for tasks that require many sequential tool calls. Note that higher step limits consume more tokens. **Default: `20`**.
+</ParamField>
+
+<ParamField body="memory_enabled" type="boolean" default={false}>
+  When `true`, the agent can read from and write to the persistent memory store during runs, allowing it to recall information across separate invocations. Requires the Memory feature to be enabled on your plan. **Default: `false`**.
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  The unique identifier for the newly created agent. Prefixed with `agent_`. Use this ID to [run the agent](/api-reference/agents/run) or to reference it in [list](/api-reference/agents/list) and delete operations.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name you provided in the request.
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model ID assigned to this agent.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  The current status of the agent. Newly created agents are always `"active"`. Possible values: `"active"`, `"inactive"`.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the agent was created.
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+```bash cURL
+curl https://api.universalagi.com/v1/agents \
+  -H "Authorization: Bearer $UNIVERSALAGI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "data-analyst",
+    "model": "uagi-1-pro",
+    "system_prompt": "You are a data analyst. Analyze datasets and produce structured reports.",
+    "tools": ["calculator", "code_runner"],
+    "max_steps": 25,
+    "memory_enabled": true
+  }'
+```
+
+```python Python
+from universalagi import UniversalAGI
+
+client = UniversalAGI()
+
+agent = client.agents.create(
+    name="data-analyst",
+    model="uagi-1-pro",
+    system_prompt="You are a data analyst. Analyze datasets and produce structured reports.",
+    tools=["calculator", "code_runner"],
+    max_steps=25,
+    memory_enabled=True,
+)
+
+print(agent.id)   # e.g. "agent_7f8e9d0c"
+```
+
+```javascript JavaScript
+import UniversalAGI from 'universalagi';
+
+const client = new UniversalAGI();
+
+const agent = await client.agents.create({
+  name: 'data-analyst',
+  model: 'uagi-1-pro',
+  systemPrompt: 'You are a data analyst. Analyze datasets and produce structured reports.',
+  tools: ['calculator', 'code_runner'],
+  maxSteps: 25,
+  memoryEnabled: true,
+});
+
+console.log(agent.id); // e.g. "agent_7f8e9d0c"
+```
+</CodeGroup>
+
+**Request body:**
+```json
+{
+  "name": "data-analyst",
+  "model": "uagi-1-pro",
+  "system_prompt": "You are a data analyst. Analyze datasets and produce structured reports.",
+  "tools": ["calculator", "code_runner"],
+  "max_steps": 25,
+  "memory_enabled": true
+}
+```
+
+**Response:**
+```json
+{
+  "id": "agent_7f8e9d0c",
+  "name": "data-analyst",
+  "model": "uagi-1-pro",
+  "status": "active",
+  "created_at": "2024-11-15T10:30:00Z"
+}
+```

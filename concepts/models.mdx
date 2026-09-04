@@ -1,0 +1,85 @@
+---
+title: "UniversalAGI Models: Choosing the Right AI for Your Task"
+sidebarTitle: "Models"
+description: "Explore the AI models available on UniversalAGI, their capabilities, context windows, and how to select the right model for your use case."
+---
+
+UniversalAGI provides multiple AGI-grade models, each optimized for a different class of tasks. Whether you need rapid responses for a user-facing chat interface, deep reasoning over lengthy documents, or fast semantic embeddings for search, there is a model tuned to match your workload. Understanding the tradeoffs between these models helps you control latency, cost, and output quality across your application.
+
+## Available models
+
+| Model | Context Window | Best For |
+|-------|---------------|----------|
+| `uagi-1` | 128k tokens | General-purpose reasoning, chat, analysis |
+| `uagi-1-fast` | 32k tokens | Low-latency applications, simple completions |
+| `uagi-1-pro` | 200k tokens | Complex reasoning, long documents, research |
+| `uagi-embed` | N/A | Text embeddings and semantic search |
+
+<Tip>
+  Start with `uagi-1` for most use cases. It strikes the best balance between capability and speed, and its 128k context window is sufficient for the vast majority of applications. Reach for `uagi-1-pro` only when you need extended context or especially demanding multi-step reasoning.
+</Tip>
+
+## Specifying a model
+
+Pass the `model` parameter in every request to control which model processes your input. If you omit it, the API defaults to `uagi-1`.
+
+<CodeGroup>
+
+```python Python
+from universalagi import UniversalAGI
+
+client = UniversalAGI()
+
+response = client.completions.create(
+    model="uagi-1-pro",
+    messages=[
+        {"role": "user", "content": "Summarize the attached research paper."}
+    ]
+)
+
+print(response.content)
+```
+
+```typescript TypeScript
+import UniversalAGI from "universalagi";
+
+const client = new UniversalAGI();
+
+const response = await client.completions.create({
+  model: "uagi-1-pro",
+  messages: [
+    { role: "user", content: "Summarize the attached research paper." }
+  ],
+});
+
+console.log(response.content);
+```
+
+</CodeGroup>
+
+## Model versioning
+
+Every model is versioned using a dated suffix, such as `uagi-1-2024-11`. Pinning to a dated version gives you full reproducibility — the exact same model weights handle every request, regardless of when you make it.
+
+The bare aliases (`uagi-1`, `uagi-1-fast`, `uagi-1-pro`) are **stable pointers** that always resolve to the latest production release of each model family. Stable aliases are updated on a published schedule and come with a notice period so you have time to test before any change takes effect.
+
+<CardGroup cols={2}>
+  <Card title="Pinned version" icon="lock">
+    Use `uagi-1-2024-11` when you need guaranteed reproducibility across deployments — ideal for evaluation pipelines and regulated environments.
+  </Card>
+  <Card title="Stable alias" icon="rotate">
+    Use `uagi-1` when you want automatic access to quality improvements over time without changing your code.
+  </Card>
+</CardGroup>
+
+To list all available model versions programmatically:
+
+```python
+models = client.models.list()
+for model in models:
+    print(model.id, model.created_at)
+```
+
+<Note>
+  Model pricing varies by context window size and capability tier. See the full breakdown at [universalagi.com/pricing](https://universalagi.com/pricing).
+</Note>

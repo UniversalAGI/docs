@@ -1,0 +1,144 @@
+---
+title: "Tool Use: Custom Functions and APIs on UniversalAGI"
+sidebarTitle: "Tool Use"
+description: "Learn how to define custom tools and handle function calls so UniversalAGI models can interact with your own APIs and data sources."
+---
+
+Tool use — also called function calling — lets a UniversalAGI model reach outside of its training data and interact with systems you control. When the model determines that a tool would help answer the user's request, it pauses generation, emits a structured tool call, and waits for your application to execute the function and return the result. This page walks you through the full round-trip: defining a tool, passing it to the API, detecting the call in the response, executing your function, and sending the result back.
+
+## Define a tool
+
+Tools are described using [JSON Schema](https://json-schema.org/). Each tool definition has a `type` of `"function"` and a nested `function` object that specifies the name, a plain-English description (which the model reads to decide when to invoke it), and a `parameters` schema.
+
+The example below defines a `lookup_order` tool that accepts a single required string argument:
+
+```json
+{
+  "type": "function",
+  "function": {
+    "name": "lookup_order",
+    "description": "Look up the status of a customer order by its order ID.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "order_id": {
+          "type": "string",
+          "description": "The unique order ID to look up, e.g. '12345'."
+        }
+      },
+      "required": ["order_id"]
+    }
+  }
+}
+```
+
+Write descriptions that are specific and action-oriented. The model uses them to decide whether to call the tool and what arguments to pass, so vague descriptions lead to missed or incorrect calls.
+
+## Pass tools to the API
+
+Include your tool definitions in the `tools` array of a standard completions request. Set `tool_choice` to `"auto"` to let the model decide when a tool is appropriate, or to `"required"` to force a tool call on every turn.
+
+```json
+{
+  "model": "uagi-1",
+  "messages": [
+    { "role": "user", "content": "What's the status of order #12345?" }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "lookup_order",
+        "description": "Look up the status of a customer order by its order ID.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": { "type": "string", "description": "The order ID to look up." }
+          },
+          "required": ["order_id"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}
+```
+
+## Handle tool calls
+
+When the model wants to call a tool, the response's `finish_reason` is `"tool_calls"` rather than `"stop"`. Your application must:
+
+1. Detect the `"tool_calls"` finish reason.
+2. Extract the function name and JSON-encoded arguments from the response.
+3. Execute the corresponding function in your own code.
+4. Append both the assistant's tool-call message and the tool result to the messages array.
+5. Send a follow-up request so the model can incorporate the result and produce a final answer.
+
+The complete round-trip looks like this:
+
+```python
+import json
+import os
+from universalagi import UniversalAGI
+
+client = UniversalAGI(api_key=os.environ["UNIVERSALAGI_API_KEY"])
+
+# Define your custom tool
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "lookup_order",
+        "description": "Look up the status of a customer order",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string",
+                    "description": "The order ID to look up"
+                }
+            },
+            "required": ["order_id"]
+        }
+    }
+}]
+
+messages = [{"role": "user", "content": "What's the status of order #12345?"}]
+
+# First API call — the model decides whether to use a tool
+response = client.completions.create(
+    model="uagi-1",
+    messages=messages,
+    tools=tools,
+    tool_choice="auto"
+)
+
+# Check if the model wants to call a tool
+if response.choices[0].finish_reason == "tool_calls":
+    tool_call = response.choices[0].message.tool_calls[0]
+    args = json.loads(tool_call.function.arguments)
+
+    # Execute your function with the arguments the model provided
+    order_status = lookup_order(args["order_id"])  # your implementation
+
+    # Append the assistant's tool-call message and the tool result
+    messages.append(response.choices[0].message)
+    messages.append({
+        "role": "tool",
+        "tool_call_id": tool_call.id,
+        "content": json.dumps(order_status)
+    })
+
+    # Second API call — the model reads the result and generates a final answer
+    final_response = client.completions.create(
+        model="uagi-1",
+        messages=messages,
+        tools=tools
+    )
+    print(final_response.choices[0].message.content)
+```
+
+<Tip>
+  **Validate tool arguments before executing them.** The model generates arguments based on your schema, but you should still validate types, ranges, and permissions in your own code before passing them to a live database or external API. Treat model-generated arguments with the same caution you would apply to any external user input.
+</Tip>
+
+For a full list of built-in tools that UniversalAGI provides out of the box (web search, code interpreter, and more), see the [Tools reference](/concepts/tools).

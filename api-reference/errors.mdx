@@ -1,0 +1,125 @@
+---
+title: "UniversalAGI API Error Codes and Response Reference"
+sidebarTitle: "Errors"
+description: "Complete reference for UniversalAGI API HTTP error codes, error response structure, and how to handle each error type in your integration."
+---
+
+When a request to the UniversalAGI API fails, the response body always contains a structured `error` object — never a plain string or an empty body. This consistency means you can write a single error-handling path in your integration regardless of what went wrong. Every error response is accompanied by an appropriate HTTP status code so that standard HTTP middleware and monitoring tools can classify failures without inspecting the body.
+
+## Error Response Format
+
+All error responses follow this structure:
+
+```json
+{
+  "error": {
+    "code": "authentication_failed",
+    "message": "The API key provided is invalid or has been revoked.",
+    "type": "authentication_error",
+    "param": null
+  }
+}
+```
+
+The fields in the `error` object are:
+
+<ResponseField name="error.code" type="string">
+  A short, machine-readable identifier for the specific error. Use this field for programmatic error handling — for example, branching on `"rate_limit_exceeded"` to implement a retry loop.
+</ResponseField>
+
+<ResponseField name="error.message" type="string">
+  A human-readable description of what went wrong. This is suitable for logging and developer-facing error messages, but should not be shown directly to end users.
+</ResponseField>
+
+<ResponseField name="error.type" type="string">
+  A broad category for the error, such as `"authentication_error"` or `"validation_error"`. Useful for grouping errors in dashboards and alerts.
+</ResponseField>
+
+<ResponseField name="error.param" type="string | null">
+  The specific request parameter that caused the error, if applicable. For example, a validation failure on the `temperature` field would set `param` to `"temperature"`. This is `null` when the error is not tied to a single parameter.
+</ResponseField>
+
+## HTTP Status Codes
+
+The UniversalAGI API uses standard HTTP status codes to indicate the class of each error. The table below maps each status code to its error `code` value and a plain-language explanation.
+
+| Status | Code | Meaning |
+|---|---|---|
+| `400` | `bad_request` | Malformed request body or missing required parameter. Check that your JSON is valid and all required fields are present. |
+| `401` | `authentication_failed` | Invalid or missing API key. Verify the `Authorization` header is present and the key is correct. |
+| `403` | `permission_denied` | Your API key is valid but lacks the permissions required for this operation. Check your plan and key scope in the dashboard. |
+| `404` | `not_found` | The requested resource does not exist. Check that the ID or path is correct. |
+| `422` | `validation_error` | The request body is valid JSON but fails schema validation — for example, an out-of-range `temperature` value or an unrecognised `model` ID. Inspect `error.param` for the offending field. |
+| `429` | `rate_limit_exceeded` | You have sent too many requests in a short window. Back off and retry. See the rate limits documentation for per-plan limits. |
+| `500` | `internal_error` | An unexpected error occurred on the UniversalAGI servers. These are rare; if they persist, check the [status page](https://status.universalagi.com). |
+| `503` | `service_unavailable` | The API is temporarily unavailable, typically due to maintenance or a brief capacity event. Retry after a short delay. |
+
+## Retryable Errors
+
+Not all errors are worth retrying. The following two status codes indicate **transient conditions** where retrying the same request — after an appropriate delay — is safe and likely to succeed:
+
+- **`429 rate_limit_exceeded`** — You've exceeded your request rate. Implement [exponential backoff](https://en.wikipedia.org/wiki/Exponential_backoff): wait 1 second before the first retry, doubling the interval on each subsequent attempt. Respect the `Retry-After` response header if present.
+- **`503 service_unavailable`** — The API is temporarily down. Retry with exponential backoff. Subscribe to the [status page](https://status.universalagi.com) for real-time incident updates.
+
+All other status codes (`400`, `401`, `403`, `404`, `422`, `500`) indicate either a **client-side problem** that will not resolve on retry, or a server-side error that requires investigation. Retrying these without first fixing the underlying issue wastes quota and may trigger additional rate limiting.
+
+<Warning>
+  Do **not** retry `401` or `403` errors in an automated loop. A `401` means your API key is missing or invalid — retrying will not make it valid, and repeated failed authentication attempts may trigger a temporary lockout. A `403` means your key does not have the required permissions; you must update the key's scope or upgrade your plan before the request can succeed.
+</Warning>
+
+## Handling Errors in Code
+
+Below is a practical pattern for handling API errors in Python and JavaScript.
+
+<CodeGroup>
+```python Python
+import httpx, os, time
+
+def call_api(payload: dict, retries: int = 3):
+    api_key = os.environ["UNIVERSALAGI_API_KEY"]
+    for attempt in range(retries):
+        response = httpx.post(
+            "https://api.universalagi.com/v1/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload,
+        )
+        if response.is_success:
+            return response.json()
+
+        error = response.json().get("error", {})
+        code = error.get("code")
+
+        if response.status_code in (429, 503) and attempt < retries - 1:
+            wait = 2 ** attempt          # exponential backoff: 1s, 2s, 4s …
+            time.sleep(wait)
+            continue
+
+        raise RuntimeError(f"API error [{response.status_code}] {code}: {error.get('message')}")
+```
+
+```javascript JavaScript
+async function callApi(payload, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const res = await fetch('https://api.universalagi.com/v1/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.UNIVERSALAGI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) return res.json();
+
+    const { error } = await res.json();
+
+    if ([429, 503].includes(res.status) && attempt < retries - 1) {
+      await new Promise(r => setTimeout(r, 1000 * 2 ** attempt)); // exponential backoff
+      continue;
+    }
+
+    throw new Error(`API error [${res.status}] ${error.code}: ${error.message}`);
+  }
+}
+```
+</CodeGroup>

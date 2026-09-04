@@ -1,0 +1,64 @@
+---
+title: "UniversalAGI SDKs: Python and JavaScript Client Libraries"
+sidebarTitle: "Overview"
+description: "Explore the official UniversalAGI client libraries for Python and JavaScript. Both SDKs wrap the REST API with idiomatic interfaces and type safety."
+---
+
+UniversalAGI ships official SDKs for Python and JavaScript/TypeScript that wrap the REST API with idiomatic, language-native interfaces. Rather than crafting raw HTTP requests, you interact with typed objects and method calls that map directly to platform capabilities — completions, agents, memory, and more. Both libraries handle authentication, retries, streaming, and pagination out of the box so you can focus on building.
+
+<CardGroup cols={2}>
+  <Card title="Python SDK" icon="python" href="/sdks/python">
+    Install via pip, supports synchronous and asyncio-based async workflows, streaming, and automatic retries.
+  </Card>
+  <Card title="JavaScript SDK" icon="js" href="/sdks/javascript">
+    Install via npm/yarn/pnpm, ships full TypeScript type definitions, works in Node.js and browser environments.
+  </Card>
+</CardGroup>
+
+## Feature comparison
+
+Both SDKs are built to be functionally equivalent — every capability available in one is available in the other. The table below highlights language-specific implementation details.
+
+| Feature | Python | JavaScript |
+|---|---|---|
+| Async support | ✓ asyncio | ✓ Promise / async-await |
+| TypeScript types | N/A | ✓ built-in |
+| Streaming | ✓ | ✓ |
+| Auto-retry | ✓ | ✓ |
+| Pagination | ✓ | ✓ |
+
+## Base URL
+
+All SDK requests are sent to the following base URL by default:
+
+```
+https://api.universalagi.com/v1
+```
+
+You can override this at client initialization time if you need to point at a proxy or a self-hosted gateway. See the individual SDK pages for the relevant constructor option (`base_url` in Python, `baseURL` in JavaScript).
+
+## Authentication
+
+Both SDKs automatically read your API key from the `UNIVERSALAGI_API_KEY` environment variable when no key is passed explicitly to the constructor. This is the recommended approach — it keeps secrets out of source code and works seamlessly in CI/CD pipelines and container environments.
+
+```bash
+export UNIVERSALAGI_API_KEY="your-api-key"
+```
+
+Once the variable is set, instantiate either client with no arguments:
+
+```python
+# Python
+from universalagi import UniversalAGI
+client = UniversalAGI()
+```
+
+```typescript
+// JavaScript / TypeScript
+import UniversalAGI from 'universalagi';
+const client = new UniversalAGI();
+```
+
+<Note>
+  Every SDK method corresponds directly to a REST API endpoint. If you need low-level control or are working in a language without an official SDK, refer to the **API Reference** tab for full endpoint documentation, request/response schemas, and interactive examples.
+</Note>

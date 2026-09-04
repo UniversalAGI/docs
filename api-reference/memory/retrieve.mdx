@@ -1,0 +1,152 @@
+---
+title: "GET /v1/memory/retrieve — Retrieve Relevant Memories"
+sidebarTitle: "Retrieve Memory"
+description: "GET /v1/memory/retrieve — semantically search stored memories by query string. Returns the most relevant entries ranked by similarity score."
+---
+
+The memory retrieve endpoint performs a semantic similarity search across your stored memory entries, returning the most relevant results for a given query string. Rather than matching exact keywords, the API embeds your query and compares it against the embeddings of all stored entries, ranking results by cosine similarity. This makes retrieval robust to paraphrasing and synonyms — a query for `"text formatting preferences"` will match an entry about `"bullet points and section headers"` even though none of those exact words appear in the query. You can scope retrieval to a specific namespace and set a minimum similarity threshold to control result quality.
+
+## Endpoint
+
+```
+GET https://api.universalagi.com/v1/memory/retrieve
+```
+
+## Query Parameters
+
+<ParamField query="query" type="string" required>
+  The natural-language query to search against your stored memories. The API embeds this string and returns the entries most semantically similar to it. Be as specific as possible for best results.
+</ParamField>
+
+<ParamField query="namespace" type="string">
+  Restrict retrieval to a specific namespace. Only entries stored under this namespace will be considered. Omit to search across all namespaces associated with your API key. Optional.
+</ParamField>
+
+<ParamField query="limit" type="integer" default={5}>
+  The maximum number of results to return. Must be between `1` and `20`. Results are always ordered by similarity score, highest first. **Default: `5`**.
+</ParamField>
+
+<ParamField query="min_score" type="number">
+  A minimum similarity threshold in the range `0` to `1`. Only entries with a similarity score greater than or equal to this value will be returned. Use a higher threshold (e.g. `0.85`) to return only highly relevant results; use a lower one (e.g. `0.5`) to cast a wider net. Omit to return the top `limit` results regardless of score. Optional.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  An array of memory objects ordered by similarity score, descending. May be empty if no stored entries meet the query or `min_score` threshold.
+
+  <ResponseField name="data[].id" type="string">
+    The unique identifier for this memory entry, prefixed with `mem_`.
+  </ResponseField>
+
+  <ResponseField name="data[].content" type="string">
+    The text content of the memory entry.
+  </ResponseField>
+
+  <ResponseField name="data[].score" type="number">
+    The cosine similarity score between the query embedding and this entry's embedding, in the range `0` to `1`. A score of `1.0` indicates a perfect match; scores above `0.8` are generally considered high relevance.
+  </ResponseField>
+
+  <ResponseField name="data[].namespace" type="string">
+    The namespace the entry belongs to.
+  </ResponseField>
+
+  <ResponseField name="data[].tags" type="array">
+    The list of tags attached to the entry at storage time.
+  </ResponseField>
+
+  <ResponseField name="data[].created_at" type="string">
+    ISO 8601 timestamp of when the entry was originally stored.
+  </ResponseField>
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+```bash cURL
+curl "https://api.universalagi.com/v1/memory/retrieve?query=formatting+preferences&namespace=user-prefs&limit=3" \
+  -H "Authorization: Bearer $UNIVERSALAGI_API_KEY"
+```
+
+```python Python
+from universalagi import UniversalAGI
+
+client = UniversalAGI()
+
+results = client.memory.retrieve(
+    query="formatting preferences",
+    namespace="user-prefs",
+    limit=3,
+)
+
+for entry in results.data:
+    print(f"[{entry.score:.2f}] {entry.content}")
+```
+
+```javascript JavaScript
+import UniversalAGI from 'universalagi';
+
+const client = new UniversalAGI();
+
+const results = await client.memory.retrieve({
+  query: 'formatting preferences',
+  namespace: 'user-prefs',
+  limit: 3,
+});
+
+for (const entry of results.data) {
+  console.log(`[${entry.score.toFixed(2)}] ${entry.content}`);
+}
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "mem_x9y8z7w6",
+      "content": "The user prefers responses in bullet points with clear section headers.",
+      "score": 0.94,
+      "namespace": "user-prefs",
+      "tags": ["formatting", "preferences"],
+      "created_at": "2024-11-15T12:00:00Z"
+    }
+  ]
+}
+```
+
+## Using Retrieved Memories in Completions
+
+A common pattern is to retrieve relevant memories and inject them into the system prompt of a completion request, giving the model access to long-term context without including your entire memory store in every call:
+
+```python Python — inject memories into a completion
+from universalagi import UniversalAGI
+
+client = UniversalAGI()
+user_query = "Can you summarise the latest research on transformer architectures?"
+
+# 1. Retrieve relevant memories
+memories = client.memory.retrieve(query=user_query, namespace="user-prefs", limit=5)
+memory_context = "\n".join(f"- {m.content}" for m in memories.data)
+
+# 2. Inject into the system prompt
+system_prompt = f"""You are a helpful research assistant.
+
+Relevant context about this user:
+{memory_context}
+"""
+
+# 3. Create the completion
+response = client.completions.create(
+    model="uagi-1",
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user",   "content": user_query},
+    ],
+)
+
+print(response.choices[0].message.content)
+```
+
+Agents with `memory_enabled: true` perform this retrieval step automatically on each run, so you only need to manage it manually for completion-based integrations.

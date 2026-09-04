@@ -1,0 +1,129 @@
+---
+title: "UniversalAGI Tools: Built-In and Custom Function Calling"
+sidebarTitle: "Tools"
+description: "Equip UniversalAGI agents with built-in and custom tools to perform web searches, run code, call APIs, and complete real-world tasks."
+---
+
+Tools allow UniversalAGI agents to take actions in the real world — searching the web, running code, calling APIs, reading files, and more. Without tools, a model can only generate text based on its training data. With tools, it becomes an active participant that can look up live information, perform calculations, and interact with external systems to complete tasks that no static response could address.
+
+## Built-in tools
+
+UniversalAGI ships a set of ready-to-use tools that you can attach to any agent by name. No additional configuration is required.
+
+| Tool | Description |
+|------|-------------|
+| `web_search` | Search the web for current information |
+| `calculator` | Perform mathematical computations |
+| `code_runner` | Execute Python code in a sandbox |
+| `file_reader` | Read and parse file content |
+
+Attach built-in tools to an agent by passing their names in the `tools` list:
+
+```python
+from universalagi import UniversalAGI
+
+client = UniversalAGI()
+
+agent = client.agents.create(
+    name="data-analyst",
+    model="uagi-1",
+    system_prompt="You are a data analyst. Use code to answer quantitative questions.",
+    tools=["calculator", "code_runner", "file_reader"],
+    max_steps=10
+)
+```
+
+## Custom tools (function calling)
+
+Beyond the built-in set, you can define your own tools using JSON Schema. The model will call them automatically when it judges they are necessary to complete the task. This lets you expose any internal API, database query, or business logic as a tool the agent can use.
+
+Define each tool as an object with a `type` of `"function"` and a `function` block that names the tool, describes what it does, and specifies its parameters:
+
+```python
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "City name or coordinates"
+                    },
+                    "units": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"]
+                    }
+                },
+                "required": ["location"]
+            }
+        }
+    }
+]
+
+response = client.completions.create(
+    model="uagi-1",
+    messages=[{"role": "user", "content": "What's the weather in Tokyo?"}],
+    tools=tools,
+    tool_choice="auto"
+)
+```
+
+Set `tool_choice` to `"auto"` to let the model decide when to call tools, `"required"` to force at least one tool call, or the name of a specific function to always invoke that function.
+
+## Handling tool calls
+
+When the model decides to call one of your custom tools, it does not execute the function itself — it returns a structured `tool_call` object describing which function to invoke and with what arguments. Your code is responsible for executing the function and returning the result.
+
+<Steps>
+  <Step title="Detect the tool call">
+    Check `response.stop_reason`. When the model wants to call a tool, `stop_reason` will be `"tool_call"` and `response.tool_calls` will contain one or more call objects.
+
+    ```python
+    if response.stop_reason == "tool_call":
+        for tool_call in response.tool_calls:
+            print(tool_call.function.name)       # "get_weather"
+            print(tool_call.function.arguments)  # '{"location": "Tokyo", "units": "celsius"}'
+    ```
+  </Step>
+  <Step title="Execute the function">
+    Parse the arguments and call your own implementation of the function.
+
+    ```python
+    import json
+
+    args = json.loads(tool_call.function.arguments)
+    result = get_weather(location=args["location"], units=args.get("units", "celsius"))
+    ```
+  </Step>
+  <Step title="Return the result">
+    Append the tool result to the message list as a `tool` role message and send the updated messages back to the API. The model will continue its response using the result you provided.
+
+    ```python
+    messages.append({
+        "role": "tool",
+        "tool_call_id": tool_call.id,
+        "content": json.dumps(result)
+    })
+
+    final_response = client.completions.create(
+        model="uagi-1",
+        messages=messages,
+        tools=tools
+    )
+
+    print(final_response.content)
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Always validate and sanitize tool arguments before passing them to sensitive functions such as database queries or file system operations. The model constructs arguments based on user input, which means they should be treated as untrusted data.
+</Warning>
+
+<Note>
+  For a complete walkthrough with error handling, parallel tool calls, and streaming, see the [Tool Use Guide](/guides/tool-use).
+</Note>
